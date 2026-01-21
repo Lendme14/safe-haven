@@ -5,17 +5,16 @@
  * for advanced features that require direct native access.
  */
 
-import { PluginListenerHandle, registerPlugin } from '@capacitor/core';
-import type { Plugin } from '@capacitor/core';
+import { registerPlugin } from '@capacitor/core';
 
 /**
  * Native module interface for custom plugins
  */
-export interface NativeBridgePlugin extends Plugin {
+export interface NativeBridgePlugin {
   // Audio methods
   initAudioSession(): Promise<void>;
   getAudioLevel(): Promise<{ level: number }>;
-  setAudioOutput(output: 'speaker' | 'receiver'): Promise<void>;
+  setAudioOutput(options: { output: 'speaker' | 'receiver' }): Promise<void>;
 
   // Biometric methods
   biometricGetStatus(): Promise<{ available: boolean; enrolled: number }>;
@@ -24,21 +23,7 @@ export interface NativeBridgePlugin extends Plugin {
   // Notification methods
   notificationPermission(): Promise<{ granted: boolean }>;
   notificationChannels(): Promise<{ channels: any[] }>;
-
-  // Lifecycle methods
-  onAppPause(): PluginListenerHandle;
-  onAppResume(): PluginListenerHandle;
 }
-
-/**
- * Get reference to native bridge plugin
- * Custom plugins can be registered here
- */
-export const getNativeBridgePlugin = (): NativeBridgePlugin => {
-  return registerPlugin<NativeBridgePlugin>('NativeBridge', {
-    web: new WebNativeBridgeImpl(),
-  });
-};
 
 /**
  * Web implementation for testing and fallback
@@ -52,8 +37,8 @@ class WebNativeBridgeImpl implements NativeBridgePlugin {
     return { level: 0 };
   }
 
-  async setAudioOutput(output: 'speaker' | 'receiver'): Promise<void> {
-    console.log(`Web: Audio output set to ${output}`);
+  async setAudioOutput(options: { output: 'speaker' | 'receiver' }): Promise<void> {
+    console.log(`Web: Audio output set to ${options.output}`);
   }
 
   async biometricGetStatus(): Promise<{ available: boolean; enrolled: number }> {
@@ -71,19 +56,17 @@ class WebNativeBridgeImpl implements NativeBridgePlugin {
   async notificationChannels(): Promise<{ channels: any[] }> {
     return { channels: [] };
   }
-
-  onAppPause(): PluginListenerHandle {
-    return {
-      remove: async () => {},
-    };
-  }
-
-  onAppResume(): PluginListenerHandle {
-    return {
-      remove: async () => {},
-    };
-  }
 }
+
+/**
+ * Get reference to native bridge plugin
+ * Custom plugins can be registered here
+ */
+export const getNativeBridgePlugin = (): NativeBridgePlugin => {
+  return registerPlugin<NativeBridgePlugin>('NativeBridge', {
+    web: () => Promise.resolve(new WebNativeBridgeImpl()),
+  });
+};
 
 /**
  * Helper utilities for native operations
@@ -122,7 +105,7 @@ export class NativeHelper {
   static async setAudioOutput(output: 'speaker' | 'receiver'): Promise<void> {
     try {
       const bridge = getNativeBridgePlugin();
-      await bridge.setAudioOutput(output);
+      await bridge.setAudioOutput({ output });
       console.log(`Audio output switched to ${output}`);
     } catch (error) {
       console.warn('Failed to set audio output:', error);
@@ -182,32 +165,6 @@ export class NativeHelper {
     } catch (error) {
       console.warn('Failed to get notification channels:', error);
       return [];
-    }
-  }
-
-  /**
-   * Setup app lifecycle listeners
-   */
-  static setupLifecycleListeners(
-    onPause?: () => void,
-    onResume?: () => void
-  ): void {
-    try {
-      const bridge = getNativeBridgePlugin();
-
-      if (onPause) {
-        const pauseListener = bridge.onAppPause();
-        // Handle pause
-        if (onPause) onPause();
-      }
-
-      if (onResume) {
-        const resumeListener = bridge.onAppResume();
-        // Handle resume
-        if (onResume) onResume();
-      }
-    } catch (error) {
-      console.warn('Failed to setup lifecycle listeners:', error);
     }
   }
 }

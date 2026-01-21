@@ -1,5 +1,5 @@
 import { LocalNotifications } from '@capacitor/local-notifications';
-import type { LocalNotificationSchema } from '@capacitor/local-notifications';
+import type { LocalNotificationSchema, Importance } from '@capacitor/local-notifications';
 
 export interface NotificationOptions {
   id?: number;
@@ -9,17 +9,14 @@ export interface NotificationOptions {
   summaryText?: string;
   autoCancel?: boolean;
   ongoing?: boolean;
-  priority?: number;
-  actions?: NotificationAction[];
   smallIcon?: string;
   largeIcon?: string;
   iconColor?: string;
   sound?: string;
-  soundId?: number;
   vibrate?: boolean;
-  vibration?: number;
   tag?: string;
-  channel?: string;
+  channelId?: string;
+  schedule?: { at: Date };
   [key: string]: any;
 }
 
@@ -122,8 +119,18 @@ export class NotificationService {
     options: Partial<NotificationOptions>
   ): Promise<void> {
     try {
-      const existing = this.persistentNotifications.get(id) || {};
-      const updated = { ...existing, ...options, id };
+      const existing = this.persistentNotifications.get(id);
+      if (!existing) {
+        throw new Error('Notification not found');
+      }
+      
+      const updated: NotificationOptions = { 
+        ...existing, 
+        ...options, 
+        id,
+        title: options.title || existing.title,
+        body: options.body || existing.body,
+      };
 
       this.persistentNotifications.set(id, updated);
 
@@ -155,7 +162,12 @@ export class NotificationService {
    */
   async cancelAllNotifications(): Promise<void> {
     try {
-      await LocalNotifications.cancelAll();
+      const pending = await LocalNotifications.getPending();
+      if (pending.notifications.length > 0) {
+        await LocalNotifications.cancel({ 
+          notifications: pending.notifications.map(n => ({ id: n.id })) 
+        });
+      }
       this.persistentNotifications.clear();
     } catch (error) {
       console.error('Error canceling all notifications:', error);
@@ -254,16 +266,12 @@ export class NotificationService {
       summaryText: options.summaryText,
       autoCancel: options.autoCancel !== false,
       ongoing: options.ongoing || false,
-      priority: options.priority || 0,
       smallIcon: options.smallIcon || 'ic_stat_icon_config_sample',
       largeIcon: options.largeIcon,
       iconColor: options.iconColor || '#488AFF',
       sound: options.sound,
-      vibrate: options.vibrate !== false,
-      tag: options.tag,
-      channel: options.channel || 'default',
+      channelId: options.channelId || 'default',
       schedule: options.schedule,
-      ...options,
     };
   }
 
@@ -281,38 +289,13 @@ export class NotificationService {
   }
 
   /**
-   * Get delivered notifications
-   */
-  async getDeliveredNotifications(): Promise<LocalNotificationSchema[]> {
-    try {
-      const result = await LocalNotifications.getDelivered();
-      return result.notifications;
-    } catch (error) {
-      console.error('Error getting delivered notifications:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Remove delivered notification
-   */
-  async removeDeliveredNotification(id: number): Promise<void> {
-    try {
-      await LocalNotifications.removeDelivered({ notifications: [{ id }] });
-    } catch (error) {
-      console.error('Error removing delivered notification:', error);
-      throw error;
-    }
-  }
-
-  /**
    * Create notification channel (Android)
    */
   async createChannel(
     id: string,
     name: string,
     description?: string,
-    importance: number = 4
+    importance: Importance = 4 as Importance
   ): Promise<void> {
     try {
       await LocalNotifications.createChannel({
@@ -320,8 +303,9 @@ export class NotificationService {
         name,
         description,
         importance,
+        lights: true,
         lightColor: '#488AFF',
-        sound: 'beep',
+        sound: 'beep.wav',
         vibration: true,
       });
     } catch (error) {
