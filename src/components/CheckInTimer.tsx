@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Clock, Play, X, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useSafety } from '@/contexts/SafetyContext';
 import {
   Dialog,
@@ -10,6 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const CheckInTimer: React.FC = () => {
   const { 
@@ -23,12 +26,9 @@ const CheckInTimer: React.FC = () => {
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedDuration, setSelectedDuration] = useState(30);
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  const [customHours, setCustomHours] = useState(0);
+  const [customMinutes, setCustomMinutes] = useState(30);
+  const [activeTab, setActiveTab] = useState('preset');
 
   const durations = [
     { label: '15 min', value: 15 },
@@ -37,10 +37,25 @@ const CheckInTimer: React.FC = () => {
     { label: '2 hours', value: 120 },
   ];
 
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const handleStartTimer = () => {
-    startCheckInTimer(selectedDuration);
+    if (activeTab === 'custom') {
+      const totalMinutes = (customHours * 60) + customMinutes;
+      if (totalMinutes > 0) {
+        startCheckInTimer(totalMinutes);
+      }
+    } else {
+      startCheckInTimer(selectedDuration);
+    }
     setIsDialogOpen(false);
   };
+
+  const isCustomValid = customHours > 0 || customMinutes > 0;
 
   const progress = isTimerActive && timerDuration > 0 
     ? (remainingTime / (timerDuration * 60)) * 100 
@@ -114,23 +129,64 @@ const CheckInTimer: React.FC = () => {
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-4 py-4">
-          <p className="text-sm text-muted-foreground">Select duration:</p>
-          <div className="grid grid-cols-2 gap-3">
-            {durations.map((duration) => (
-              <Button
-                key={duration.value}
-                variant={selectedDuration === duration.value ? "default" : "outline"}
-                onClick={() => setSelectedDuration(duration.value)}
-                className="h-12"
-              >
-                {duration.label}
-              </Button>
-            ))}
-          </div>
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="preset">Preset</TabsTrigger>
+            <TabsTrigger value="custom">Custom</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="preset" className="space-y-4 pt-4">
+            <p className="text-sm text-muted-foreground">Select duration:</p>
+            <div className="grid grid-cols-2 gap-3">
+              {durations.map((duration) => (
+                <Button
+                  key={duration.value}
+                  variant={selectedDuration === duration.value ? "default" : "outline"}
+                  onClick={() => setSelectedDuration(duration.value)}
+                  className="h-12"
+                >
+                  {duration.label}
+                </Button>
+              ))}
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="custom" className="space-y-4 pt-4">
+            <p className="text-sm text-muted-foreground">Set custom duration:</p>
+            <div className="flex items-center gap-4">
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="hours">Hours</Label>
+                <Input
+                  id="hours"
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={customHours}
+                  onChange={(e) => setCustomHours(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))}
+                  className="text-center text-lg"
+                />
+              </div>
+              <span className="text-2xl font-bold text-muted-foreground mt-6">:</span>
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="minutes">Minutes</Label>
+                <Input
+                  id="minutes"
+                  type="number"
+                  min={0}
+                  max={59}
+                  value={customMinutes}
+                  onChange={(e) => setCustomMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                  className="text-center text-lg"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground text-center">
+              Timer will run for {customHours > 0 ? `${customHours}h ` : ''}{customMinutes}m
+            </p>
+          </TabsContent>
+        </Tabs>
 
-        <div className="flex gap-3">
+        <div className="flex gap-3 mt-4">
           <Button 
             variant="outline" 
             className="flex-1"
@@ -141,6 +197,7 @@ const CheckInTimer: React.FC = () => {
           <Button 
             className="flex-1"
             onClick={handleStartTimer}
+            disabled={activeTab === 'custom' && !isCustomValid}
           >
             <Play className="w-4 h-4 mr-2" />
             Start Timer
