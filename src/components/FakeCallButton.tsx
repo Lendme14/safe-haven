@@ -27,6 +27,12 @@ const FakeCallButton: React.FC = () => {
   const [callerNumber, setCallerNumber] = useState('+1 (555) 123-4567');
   const [delay, setDelay] = useState('0');
   const [pendingCall, setPendingCall] = useState(false);
+  const [selectedRingtone, setSelectedRingtone] = useState<'classic' | 'modern'>('classic');
+
+  const ringtones = [
+    { id: 'classic' as const, name: 'Classic Ring', description: 'Traditional phone ring' },
+    { id: 'modern' as const, name: 'Modern Tone', description: 'Soft melodic ringtone' },
+  ];
 
   const presetContacts = [
     { name: 'Mom', number: '+1 (555) 123-4567' },
@@ -68,6 +74,7 @@ const FakeCallButton: React.FC = () => {
         onEnd={handleEndCall}
         callerName={callerName}
         callerNumber={callerNumber}
+        ringtone={selectedRingtone}
       />
 
       <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
@@ -132,6 +139,25 @@ const FakeCallButton: React.FC = () => {
                 onChange={(e) => setCallerNumber(e.target.value)}
                 placeholder="+1 (555) 123-4567"
               />
+            </div>
+
+            {/* Ringtone Selection */}
+            <div className="space-y-2">
+              <Label>Ringtone</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {ringtones.map((tone) => (
+                  <Button
+                    key={tone.id}
+                    variant={selectedRingtone === tone.id ? "default" : "outline"}
+                    size="sm"
+                    className="h-auto py-2 flex-col items-start"
+                    onClick={() => setSelectedRingtone(tone.id)}
+                  >
+                    <span className="font-medium">{tone.name}</span>
+                    <span className="text-xs opacity-70">{tone.description}</span>
+                  </Button>
+                ))}
+              </div>
             </div>
 
             {/* Delay */}

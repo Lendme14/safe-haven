@@ -5,11 +5,11 @@ import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
-import { User, Lock, Moon, Crown, LogOut, ChevronRight, Heart, AlertTriangle } from 'lucide-react';
+import { User, Lock, Crown, LogOut, ChevronRight, Heart } from 'lucide-react';
+import AppLockSetup from '@/components/AppLockSetup';
 
 interface Profile {
   display_name: string | null;
@@ -21,12 +21,19 @@ interface Profile {
   is_premium: boolean;
 }
 
+interface AppSettings {
+  pin_code: string | null;
+  biometric_enabled: boolean | null;
+}
+
 const Settings: React.FC = () => {
   const { user, loading, signOut } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
   const [isEmergencyDialogOpen, setIsEmergencyDialogOpen] = useState(false);
+  const [isAppLockOpen, setIsAppLockOpen] = useState(false);
   const [editProfile, setEditProfile] = useState({ display_name: '' });
   const [emergencyInfo, setEmergencyInfo] = useState({
     blood_type: '',
@@ -38,9 +45,21 @@ const Settings: React.FC = () => {
   useEffect(() => {
     if (user) {
       fetchProfile();
+      fetchAppSettings();
     }
   }, [user]);
 
+  const fetchAppSettings = async () => {
+    const { data, error } = await supabase
+      .from('app_settings')
+      .select('pin_code, biometric_enabled')
+      .eq('user_id', user!.id)
+      .maybeSingle();
+
+    if (!error && data) {
+      setAppSettings(data);
+    }
+  };
   const fetchProfile = async () => {
     const { data, error } = await supabase
       .from('profiles')
@@ -272,20 +291,32 @@ const Settings: React.FC = () => {
             <CardTitle className="text-base">Security</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors">
+            <button 
+              className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors"
+              onClick={() => setIsAppLockOpen(true)}
+            >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
                   <Lock className="w-5 h-5 text-muted-foreground" />
                 </div>
-                <div>
+                <div className="text-left">
                   <p className="font-medium text-foreground">App Lock</p>
-                  <p className="text-xs text-muted-foreground">PIN or biometric protection</p>
+                  <p className="text-xs text-muted-foreground">
+                    {appSettings?.pin_code ? 'PIN enabled' : appSettings?.biometric_enabled ? 'Biometric enabled' : 'Not configured'}
+                  </p>
                 </div>
               </div>
-              <Switch />
-            </div>
+              <ChevronRight className="w-5 h-5 text-muted-foreground" />
+            </button>
           </CardContent>
         </Card>
+
+        <AppLockSetup
+          isOpen={isAppLockOpen}
+          onOpenChange={setIsAppLockOpen}
+          currentSettings={appSettings}
+          onSettingsUpdated={fetchAppSettings}
+        />
 
         {/* Sign Out */}
         <Button 
