@@ -3,6 +3,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import SafetyButton from '@/components/SafetyButton';
+import CheckInTimer from '@/components/CheckInTimer';
+import FakeCallButton from '@/components/FakeCallButton';
 import { useSafety } from '@/contexts/SafetyContext';
 import { Bell, MapPin } from 'lucide-react';
 
@@ -40,8 +42,14 @@ const Index: React.FC = () => {
         </header>
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col items-center justify-center px-6 pb-10">
+        <div className="flex-1 flex flex-col items-center justify-center px-6 pb-6">
           <SafetyButton />
+        </div>
+
+        {/* Quick Actions */}
+        <div className="px-6 pb-4 space-y-3">
+          <CheckInTimer />
+          <FakeCallButton />
         </div>
 
         {/* Status Indicators */}

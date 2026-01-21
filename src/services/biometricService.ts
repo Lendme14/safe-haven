@@ -1,5 +1,3 @@
-import { Platform } from '@capacitor/core';
-
 export interface BiometricAuthOptions {
   reason?: string;
   subtitle?: string;
@@ -232,12 +230,12 @@ export class BiometricAuthService {
       publicKey: {
         challenge,
         rp: {
-          name: 'Safe Haven',
+          name: 'Sentri',
           id: window.location.hostname,
         },
         user: {
           id: userId,
-          name: 'user@safehaven.local',
+          name: 'user@sentri.local',
           displayName: 'User',
         },
         pubKeyCredParams: [

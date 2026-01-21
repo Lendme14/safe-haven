@@ -1,5 +1,3 @@
-import { Platform } from '@capacitor/core';
-
 export interface AudioRecordingOptions {
   filename?: string;
   audioChannels?: number;
@@ -45,8 +43,8 @@ export class AudioRecordingService {
         }
       };
 
-      mediaRecorder.onerror = (event: MediaRecorderErrorEvent) => {
-        console.error('MediaRecorder error:', event.error);
+      mediaRecorder.onerror = (event: Event) => {
+        console.error('MediaRecorder error:', event);
         this.cleanup();
       };
 
