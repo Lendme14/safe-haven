@@ -8,7 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
-import { Plus, Trash2, User, Phone, Mail, Crown } from 'lucide-react';
+import { Plus, Trash2, User, Phone, Mail, Crown, Lock } from 'lucide-react';
+import { usePremium } from '@/hooks/usePremium';
+import PremiumUpgradeModal from '@/components/PremiumUpgradeModal';
 
 interface TrustedContact {
   id: string;
@@ -20,11 +22,12 @@ interface TrustedContact {
 
 const Contacts: React.FC = () => {
   const { user, loading } = useAuth();
+  const { isPremium, maxContacts, isLoading: premiumLoading, refetch } = usePremium();
   const [contacts, setContacts] = useState<TrustedContact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
   const [newContact, setNewContact] = useState({ name: '', phone: '', email: '' });
-  const [isPremium] = useState(false); // Will be fetched from profile
 
   useEffect(() => {
     if (user) {
@@ -57,15 +60,16 @@ const Contacts: React.FC = () => {
       return;
     }
 
-    const maxContacts = isPremium ? 3 : 1;
     if (contacts.length >= maxContacts) {
-      toast({
-        title: isPremium ? "Maximum contacts reached" : "Upgrade to Premium",
-        description: isPremium 
-          ? "You can have up to 3 trusted contacts." 
-          : "Free plan allows 1 contact. Upgrade for more.",
-        variant: "destructive",
-      });
+      if (!isPremium) {
+        setIsPremiumModalOpen(true);
+      } else {
+        toast({
+          title: "Maximum contacts reached",
+          description: "You can have up to 3 trusted contacts.",
+          variant: "destructive",
+        });
+      }
       return;
     }
 
@@ -116,7 +120,7 @@ const Contacts: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (loading || premiumLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
@@ -128,7 +132,6 @@ const Contacts: React.FC = () => {
     return <Navigate to="/auth" replace />;
   }
 
-  const maxContacts = isPremium ? 3 : 1;
   const canAddMore = contacts.length < maxContacts;
 
   return (
@@ -151,9 +154,18 @@ const Contacts: React.FC = () => {
               </span>
             </div>
             {!isPremium && (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <button 
+                onClick={() => setIsPremiumModalOpen(true)}
+                className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+              >
                 <Crown className="w-4 h-4" />
-                <span>Premium: up to 3</span>
+                <span>Get 3 contacts</span>
+              </button>
+            )}
+            {isPremium && (
+              <div className="flex items-center gap-1.5 text-xs text-success">
+                <Crown className="w-4 h-4" />
+                <span>Premium</span>
               </div>
             )}
           </CardContent>
@@ -213,12 +225,39 @@ const Contacts: React.FC = () => {
           )}
         </div>
 
+        {/* Locked slots for free users */}
+        {!isPremium && contacts.length >= 1 && (
+          <div className="space-y-3">
+            {[2, 3].map((slot) => (
+              <Card key={slot} className="border-dashed opacity-60">
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                      <Lock className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Contact Slot {slot}</p>
+                      <p className="text-xs text-muted-foreground">Premium feature</p>
+                    </div>
+                  </div>
+                  <Crown className="w-5 h-5 text-primary" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
         {/* Add Contact Button */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button 
               className="w-full" 
               disabled={!canAddMore}
+              onClick={() => {
+                if (!canAddMore && !isPremium) {
+                  setIsPremiumModalOpen(true);
+                }
+              }}
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Trusted Contact
@@ -261,6 +300,14 @@ const Contacts: React.FC = () => {
             </div>
           </DialogContent>
         </Dialog>
+
+        <PremiumUpgradeModal 
+          isOpen={isPremiumModalOpen} 
+          onOpenChange={(open) => {
+            setIsPremiumModalOpen(open);
+            if (!open) refetch();
+          }} 
+        />
       </div>
     </Layout>
   );

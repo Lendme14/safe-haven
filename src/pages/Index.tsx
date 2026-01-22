@@ -6,11 +6,17 @@ import SafetyButton from '@/components/SafetyButton';
 import CheckInTimer from '@/components/CheckInTimer';
 import FakeCallButton from '@/components/FakeCallButton';
 import { useSafety } from '@/contexts/SafetyContext';
-import { Bell, MapPin } from 'lucide-react';
+import { Bell, MapPin, Mic } from 'lucide-react';
 
 const Index: React.FC = () => {
   const { user, loading } = useAuth();
-  const { isActive } = useSafety();
+  const { isActive, isRecording, recordingDuration } = useSafety();
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   if (loading) {
     return (
@@ -56,6 +62,19 @@ const Index: React.FC = () => {
         {isActive && (
           <div className="px-6 pb-6">
             <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
+              {isRecording && (
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
+                    <Mic className="w-5 h-5 text-destructive animate-pulse" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Recording Audio</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDuration(recordingDuration)} captured
+                    </p>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center">
                   <MapPin className="w-5 h-5 text-success" />

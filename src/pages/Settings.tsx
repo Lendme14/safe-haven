@@ -8,8 +8,12 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
-import { User, Lock, Crown, LogOut, ChevronRight, Heart } from 'lucide-react';
+import { User, Lock, Crown, LogOut, ChevronRight, Heart, Moon, Sun, Cloud } from 'lucide-react';
 import AppLockSetup from '@/components/AppLockSetup';
+import ThemeToggle from '@/components/ThemeToggle';
+import { usePremium } from '@/hooks/usePremium';
+import PremiumUpgradeModal from '@/components/PremiumUpgradeModal';
+import { useTheme } from '@/hooks/useTheme';
 
 interface Profile {
   display_name: string | null;
@@ -24,16 +28,20 @@ interface Profile {
 interface AppSettings {
   pin_code: string | null;
   biometric_enabled: boolean | null;
+  auto_backup: boolean | null;
 }
 
 const Settings: React.FC = () => {
   const { user, loading, signOut } = useAuth();
+  const { isPremium, hasCloudBackup, refetch } = usePremium();
+  const { isDark, toggleTheme, theme } = useTheme();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
   const [isEmergencyDialogOpen, setIsEmergencyDialogOpen] = useState(false);
   const [isAppLockOpen, setIsAppLockOpen] = useState(false);
+  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
   const [editProfile, setEditProfile] = useState({ display_name: '' });
   const [emergencyInfo, setEmergencyInfo] = useState({
     blood_type: '',
@@ -52,7 +60,7 @@ const Settings: React.FC = () => {
   const fetchAppSettings = async () => {
     const { data, error } = await supabase
       .from('app_settings')
-      .select('pin_code, biometric_enabled')
+      .select('pin_code, biometric_enabled, auto_backup')
       .eq('user_id', user!.id)
       .maybeSingle();
 
@@ -60,6 +68,7 @@ const Settings: React.FC = () => {
       setAppSettings(data);
     }
   };
+
   const fetchProfile = async () => {
     const { data, error } = await supabase
       .from('profiles')
@@ -126,6 +135,27 @@ const Settings: React.FC = () => {
     }
   };
 
+  const toggleAutoBackup = async () => {
+    if (!hasCloudBackup) {
+      setIsPremiumModalOpen(true);
+      return;
+    }
+
+    const newValue = !appSettings?.auto_backup;
+    const { error } = await supabase
+      .from('app_settings')
+      .update({ auto_backup: newValue })
+      .eq('user_id', user!.id);
+
+    if (!error) {
+      setAppSettings(prev => prev ? { ...prev, auto_backup: newValue } : null);
+      toast({
+        title: newValue ? "Auto-backup enabled" : "Auto-backup disabled",
+        description: newValue ? "Recordings will be backed up to cloud." : "Recordings will be stored locally only.",
+      });
+    }
+  };
+
   const handleSignOut = async () => {
     await signOut();
   };
@@ -145,11 +175,14 @@ const Settings: React.FC = () => {
   return (
     <Layout>
       <div className="p-6 space-y-6">
-        <header>
-          <h1 className="text-2xl font-bold text-foreground">Settings</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage your account and preferences
-          </p>
+        <header className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Settings</h1>
+            <p className="text-muted-foreground mt-1">
+              Manage your account and preferences
+            </p>
+          </div>
+          <ThemeToggle />
         </header>
 
         {/* Profile Section */}
@@ -266,18 +299,18 @@ const Settings: React.FC = () => {
                 </div>
                 <div>
                   <p className="font-medium text-foreground">
-                    {profile?.is_premium ? 'Premium Active' : 'Upgrade to Premium'}
+                    {isPremium ? 'Premium Active' : 'Upgrade to Premium'}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {profile?.is_premium 
+                    {isPremium 
                       ? 'All features unlocked' 
                       : 'Video, cloud backup, 3 contacts'
                     }
                   </p>
                 </div>
               </div>
-              {!profile?.is_premium && (
-                <Button size="sm" variant="default">
+              {!isPremium && (
+                <Button size="sm" variant="default" onClick={() => setIsPremiumModalOpen(true)}>
                   Upgrade
                 </Button>
               )}
@@ -285,10 +318,38 @@ const Settings: React.FC = () => {
           </CardContent>
         </Card>
 
+        {/* Appearance Section */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Appearance</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <button 
+              className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors"
+              onClick={toggleTheme}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                  {isDark ? (
+                    <Moon className="w-5 h-5 text-muted-foreground" />
+                  ) : (
+                    <Sun className="w-5 h-5 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="text-left">
+                  <p className="font-medium text-foreground">Theme</p>
+                  <p className="text-xs text-muted-foreground capitalize">{theme} mode</p>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-muted-foreground" />
+            </button>
+          </CardContent>
+        </Card>
+
         {/* Security Section */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Security</CardTitle>
+            <CardTitle className="text-base">Security & Backup</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <button 
@@ -308,6 +369,30 @@ const Settings: React.FC = () => {
               </div>
               <ChevronRight className="w-5 h-5 text-muted-foreground" />
             </button>
+
+            <button 
+              className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors"
+              onClick={toggleAutoBackup}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                  <Cloud className="w-5 h-5 text-muted-foreground" />
+                </div>
+                <div className="text-left">
+                  <p className="font-medium text-foreground">Cloud Backup</p>
+                  <p className="text-xs text-muted-foreground">
+                    {hasCloudBackup 
+                      ? (appSettings?.auto_backup ? 'Enabled' : 'Disabled')
+                      : 'Premium feature'
+                    }
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {!hasCloudBackup && <Crown className="w-4 h-4 text-primary" />}
+                <ChevronRight className="w-5 h-5 text-muted-foreground" />
+              </div>
+            </button>
           </CardContent>
         </Card>
 
@@ -316,6 +401,17 @@ const Settings: React.FC = () => {
           onOpenChange={setIsAppLockOpen}
           currentSettings={appSettings}
           onSettingsUpdated={fetchAppSettings}
+        />
+
+        <PremiumUpgradeModal 
+          isOpen={isPremiumModalOpen} 
+          onOpenChange={(open) => {
+            setIsPremiumModalOpen(open);
+            if (!open) {
+              refetch();
+              fetchProfile();
+            }
+          }} 
         />
 
         {/* Sign Out */}
