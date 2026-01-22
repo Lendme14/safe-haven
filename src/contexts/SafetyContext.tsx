@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './AuthContext';
 import { toast } from '@/hooks/use-toast';
+import { useAudioRecording } from '@/hooks/useAudioRecording';
 
 interface SafetyContextType {
   // Safety Mode
@@ -11,14 +12,18 @@ interface SafetyContextType {
   deactivateSafetyMode: () => Promise<void>;
   isLoading: boolean;
   
+  // Audio Recording
+  isRecording: boolean;
+  recordingDuration: number;
+  
   // Check-in Timer
   isTimerActive: boolean;
   timerEndTime: Date | null;
-  timerDuration: number; // minutes
+  timerDuration: number;
   startCheckInTimer: (minutes: number) => void;
   cancelCheckInTimer: () => void;
   checkIn: () => void;
-  remainingTime: number; // seconds
+  remainingTime: number;
 }
 
 const SafetyContext = createContext<SafetyContextType | undefined>(undefined);
@@ -28,6 +33,14 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isActive, setIsActive] = useState(false);
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Audio recording hook
+  const { 
+    isRecording, 
+    duration: recordingDuration, 
+    startRecording, 
+    stopRecording 
+  } = useAudioRecording(currentEventId);
   
   // Check-in Timer State
   const [isTimerActive, setIsTimerActive] = useState(false);
@@ -46,7 +59,6 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setRemainingTime(remaining);
         
         if (remaining <= 0) {
-          // Timer expired - trigger missed check-in
           handleMissedCheckIn();
         }
       }, 1000);
@@ -64,7 +76,6 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     
     console.log('Check-in timer expired - alerting contacts');
     
-    // Stop the timer
     setIsTimerActive(false);
     setTimerEndTime(null);
     setRemainingTime(0);
@@ -74,7 +85,6 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     try {
-      // Create a safety event for the missed check-in
       const { data: event, error: eventError } = await supabase
         .from('safety_events')
         .insert({
@@ -88,7 +98,6 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       if (eventError) throw eventError;
 
-      // Get current location
       let location: { latitude: number; longitude: number } | undefined;
       
       if (navigator.geolocation) {
@@ -104,7 +113,6 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             longitude: position.coords.longitude,
           };
           
-          // Log location
           await supabase.from('location_logs').insert({
             safety_event_id: event.id,
             user_id: user.id,
@@ -117,7 +125,6 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       }
 
-      // Send alerts via edge function
       const { error: alertError } = await supabase.functions.invoke('send-alert', {
         body: {
           safety_event_id: event.id,
@@ -197,6 +204,18 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Capture initial location
       const location = await captureLocation(event.id);
 
+      // Start audio recording automatically
+      console.log('Starting audio recording for safety event:', event.id);
+      // Small delay to ensure state is updated
+      setTimeout(async () => {
+        const recordingStarted = await startRecording();
+        if (recordingStarted) {
+          console.log('Audio recording started successfully');
+        } else {
+          console.log('Audio recording could not start');
+        }
+      }, 500);
+
       // Send alerts via edge function
       const { error: alertError } = await supabase.functions.invoke('send-alert', {
         body: {
@@ -213,7 +232,7 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       toast({
         title: "Safety Mode Active",
-        description: "You're protected. Your contacts have been alerted.",
+        description: "Recording audio & tracking location. Contacts alerted.",
       });
 
     } catch (error) {
@@ -226,7 +245,7 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } finally {
       setIsLoading(false);
     }
-  }, [user, isActive, captureLocation]);
+  }, [user, isActive, captureLocation, startRecording]);
 
   const deactivateSafetyMode = useCallback(async () => {
     if (!user || !isActive || !currentEventId) return;
@@ -234,6 +253,10 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setIsLoading(true);
 
     try {
+      // Stop audio recording first
+      console.log('Stopping audio recording...');
+      await stopRecording();
+
       await supabase
         .from('safety_events')
         .update({
@@ -260,7 +283,7 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       toast({
         title: "You're safe now",
-        description: "Safety mode deactivated. Your contacts have been notified.",
+        description: "Safety mode deactivated. Recording saved.",
       });
 
     } catch (error) {
@@ -273,7 +296,7 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } finally {
       setIsLoading(false);
     }
-  }, [user, isActive, currentEventId]);
+  }, [user, isActive, currentEventId, stopRecording]);
 
   // Check-in Timer Functions
   const startCheckInTimer = useCallback((minutes: number) => {
@@ -354,6 +377,8 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       activateSafetyMode,
       deactivateSafetyMode,
       isLoading,
+      isRecording,
+      recordingDuration,
       isTimerActive,
       timerEndTime,
       timerDuration,

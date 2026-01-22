@@ -4,9 +4,13 @@ import { Navigate } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { format, formatDistanceToNow } from 'date-fns';
-import { Clock, MapPin, Shield, CheckCircle, ChevronRight } from 'lucide-react';
+import { Clock, MapPin, Shield, CheckCircle, ChevronRight, Download, Crown, Mic, Lock } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { usePremium } from '@/hooks/usePremium';
+import PremiumUpgradeModal from '@/components/PremiumUpgradeModal';
+import { toast } from '@/hooks/use-toast';
 
 interface SafetyEvent {
   id: string;
@@ -23,12 +27,22 @@ interface LocationLog {
   recorded_at: string;
 }
 
+interface Recording {
+  id: string;
+  file_url: string;
+  duration_seconds: number | null;
+  created_at: string;
+}
+
 const Timeline: React.FC = () => {
   const { user, loading } = useAuth();
+  const { isPremium, hasTimelineExport, refetch } = usePremium();
   const [events, setEvents] = useState<SafetyEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<SafetyEvent | null>(null);
   const [eventLocations, setEventLocations] = useState<LocationLog[]>([]);
+  const [eventRecordings, setEventRecordings] = useState<Recording[]>([]);
+  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -52,18 +66,54 @@ const Timeline: React.FC = () => {
   };
 
   const fetchEventDetails = async (eventId: string) => {
-    const { data: locations } = await supabase
-      .from('location_logs')
-      .select('*')
-      .eq('safety_event_id', eventId)
-      .order('recorded_at', { ascending: true });
+    const [locationsRes, recordingsRes] = await Promise.all([
+      supabase
+        .from('location_logs')
+        .select('*')
+        .eq('safety_event_id', eventId)
+        .order('recorded_at', { ascending: true }),
+      supabase
+        .from('recordings')
+        .select('*')
+        .eq('safety_event_id', eventId)
+        .order('created_at', { ascending: true }),
+    ]);
 
-    setEventLocations(locations || []);
+    setEventLocations(locationsRes.data || []);
+    setEventRecordings(recordingsRes.data || []);
   };
 
   const handleEventClick = (event: SafetyEvent) => {
     setSelectedEvent(event);
     fetchEventDetails(event.id);
+  };
+
+  const handleExportTimeline = () => {
+    if (!hasTimelineExport) {
+      setIsPremiumModalOpen(true);
+      return;
+    }
+
+    // Export as JSON
+    const exportData = events.map(e => ({
+      id: e.id,
+      started: e.started_at,
+      ended: e.ended_at,
+      notes: e.notes,
+    }));
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sentri-timeline-${format(new Date(), 'yyyy-MM-dd')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Timeline Exported",
+      description: "Your safety timeline has been downloaded.",
+    });
   };
 
   const calculateDuration = (start: string, end: string | null) => {
@@ -95,11 +145,27 @@ const Timeline: React.FC = () => {
   return (
     <Layout>
       <div className="p-6 space-y-6">
-        <header>
-          <h1 className="text-2xl font-bold text-foreground">Safety Timeline</h1>
-          <p className="text-muted-foreground mt-1">
-            Your safety event history
-          </p>
+        <header className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Safety Timeline</h1>
+            <p className="text-muted-foreground mt-1">
+              Your safety event history
+            </p>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleExportTimeline}
+            className="gap-2"
+          >
+            {hasTimelineExport ? (
+              <Download className="w-4 h-4" />
+            ) : (
+              <Lock className="w-4 h-4" />
+            )}
+            Export
+            {!hasTimelineExport && <Crown className="w-3 h-3 text-primary" />}
+          </Button>
         </header>
 
         {/* Events List */}
@@ -206,10 +272,39 @@ const Timeline: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Recordings */}
+                {eventRecordings.length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
+                      <Mic className="w-4 h-4" />
+                      Audio Recordings
+                    </h4>
+                    <div className="space-y-2">
+                      {eventRecordings.map((rec) => (
+                        <div 
+                          key={rec.id}
+                          className="flex items-center gap-2 text-xs bg-muted/50 p-2 rounded-lg"
+                        >
+                          <Mic className="w-3 h-3 text-primary flex-shrink-0" />
+                          <span className="text-foreground">
+                            {rec.duration_seconds ? `${rec.duration_seconds}s` : 'Recording'}
+                          </span>
+                          <span className="text-muted-foreground ml-auto">
+                            {formatDistanceToNow(new Date(rec.created_at), { addSuffix: true })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Location History */}
                 {eventLocations.length > 0 && (
                   <div className="space-y-2">
-                    <h4 className="text-sm font-medium text-foreground">Location History</h4>
+                    <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
+                      <MapPin className="w-4 h-4" />
+                      Location History
+                    </h4>
                     <div className="space-y-2 max-h-40 overflow-y-auto">
                       {eventLocations.map((loc) => (
                         <div 
@@ -232,6 +327,14 @@ const Timeline: React.FC = () => {
             )}
           </DialogContent>
         </Dialog>
+
+        <PremiumUpgradeModal 
+          isOpen={isPremiumModalOpen} 
+          onOpenChange={(open) => {
+            setIsPremiumModalOpen(open);
+            if (!open) refetch();
+          }} 
+        />
       </div>
     </Layout>
   );
