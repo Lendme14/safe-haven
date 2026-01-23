@@ -10,6 +10,7 @@ import Auth from "./pages/Auth";
 import Contacts from "./pages/Contacts";
 import Timeline from "./pages/Timeline";
 import Settings from "./pages/Settings";
+import Playback from "./pages/Playback";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
               <Route path="/contacts" element={<Contacts />} />
               <Route path="/timeline" element={<Timeline />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/playback" element={<Playback />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </SafetyProvider>
