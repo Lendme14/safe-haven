@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 
 interface RecordingState {
@@ -10,8 +9,7 @@ interface RecordingState {
   error: string | null;
 }
 
-export const useAudioRecording = (safetyEventId: string | null) => {
-  const { user } = useAuth();
+export const useAudioRecording = () => {
   const [state, setState] = useState<RecordingState>({
     isRecording: false,
     isPaused: false,
@@ -24,6 +22,8 @@ export const useAudioRecording = (safetyEventId: string | null) => {
   const streamRef = useRef<MediaStream | null>(null);
   const startTimeRef = useRef<number>(0);
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const currentEventIdRef = useRef<string | null>(null);
+  const currentUserIdRef = useRef<string | null>(null);
 
   const getSupportedMimeType = useCallback((): string => {
     const types = [
@@ -43,11 +43,15 @@ export const useAudioRecording = (safetyEventId: string | null) => {
     return 'audio/webm';
   }, []);
 
-  const startRecording = useCallback(async () => {
-    if (!user || !safetyEventId) {
-      console.log('Cannot start recording: missing user or safety event');
+  const startRecording = useCallback(async (userId: string, safetyEventId: string): Promise<boolean> => {
+    if (!userId || !safetyEventId) {
+      console.log('Cannot start recording: missing user or safety event', { userId, safetyEventId });
       return false;
     }
+
+    // Store refs for later use
+    currentUserIdRef.current = userId;
+    currentEventIdRef.current = safetyEventId;
 
     try {
       console.log('Requesting microphone permission...');
@@ -75,6 +79,7 @@ export const useAudioRecording = (safetyEventId: string | null) => {
       mediaRecorder.ondataavailable = (event: BlobEvent) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
+          console.log('Audio chunk received, size:', event.data.size);
         }
       };
 
@@ -86,13 +91,13 @@ export const useAudioRecording = (safetyEventId: string | null) => {
 
       mediaRecorder.onstart = () => {
         startTimeRef.current = Date.now();
-        console.log('Recording started');
+        console.log('Recording started at:', new Date().toISOString());
       };
 
       mediaRecorderRef.current = mediaRecorder;
       
-      // Request data every 10 seconds for safety (in case of crash)
-      mediaRecorder.start(10000);
+      // Request data every 5 seconds for safety (in case of crash)
+      mediaRecorder.start(5000);
 
       // Start duration counter
       durationIntervalRef.current = setInterval(() => {
@@ -128,13 +133,16 @@ export const useAudioRecording = (safetyEventId: string | null) => {
 
       return false;
     }
-  }, [user, safetyEventId, getSupportedMimeType]);
+  }, [getSupportedMimeType]);
 
-  const stopRecording = useCallback(async (): Promise<boolean> => {
+  const stopRecording = useCallback(async (): Promise<Blob | null> => {
     if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
       console.log('No active recording to stop');
-      return false;
+      return null;
     }
+
+    const userId = currentUserIdRef.current;
+    const safetyEventId = currentEventIdRef.current;
 
     return new Promise((resolve) => {
       const mediaRecorder = mediaRecorderRef.current!;
@@ -153,10 +161,12 @@ export const useAudioRecording = (safetyEventId: string | null) => {
         console.log('Audio blob size:', audioBlob.size, 'Duration:', duration);
 
         // Upload to storage if we have a valid blob
-        if (audioBlob.size > 0 && user && safetyEventId) {
+        if (audioBlob.size > 0 && userId && safetyEventId) {
           try {
-            const fileExt = mimeType.includes('webm') ? 'webm' : 'mp4';
-            const fileName = `${user.id}/${safetyEventId}/${Date.now()}.${fileExt}`;
+            const fileExt = mimeType.includes('webm') ? 'webm' : mimeType.includes('mp4') ? 'mp4' : 'webm';
+            const fileName = `${userId}/${safetyEventId}/${Date.now()}.${fileExt}`;
+
+            console.log('Uploading recording to:', fileName);
 
             const { error: uploadError } = await supabase.storage
               .from('recordings')
@@ -167,10 +177,15 @@ export const useAudioRecording = (safetyEventId: string | null) => {
 
             if (uploadError) {
               console.error('Upload error:', uploadError);
+              toast({
+                title: "Upload Error",
+                description: "Recording saved locally but cloud upload failed.",
+                variant: "destructive",
+              });
             } else {
               // Save recording metadata
-              await supabase.from('recordings').insert({
-                user_id: user.id,
+              const { error: dbError } = await supabase.from('recordings').insert({
+                user_id: userId,
                 safety_event_id: safetyEventId,
                 file_url: fileName,
                 file_type: 'audio',
@@ -178,10 +193,14 @@ export const useAudioRecording = (safetyEventId: string | null) => {
                 file_size_bytes: audioBlob.size,
               });
 
-              toast({
-                title: "Recording Saved",
-                description: `${duration}s audio recording has been saved.`,
-              });
+              if (dbError) {
+                console.error('Database error:', dbError);
+              } else {
+                toast({
+                  title: "Recording Saved",
+                  description: `${duration}s audio recording has been saved.`,
+                });
+              }
             }
           } catch (error) {
             console.error('Error saving recording:', error);
@@ -196,12 +215,12 @@ export const useAudioRecording = (safetyEventId: string | null) => {
           error: null,
         });
 
-        resolve(true);
+        resolve(audioBlob);
       };
 
       mediaRecorder.stop();
     });
-  }, [user, safetyEventId, getSupportedMimeType]);
+  }, [getSupportedMimeType]);
 
   const pauseRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
@@ -228,6 +247,8 @@ export const useAudioRecording = (safetyEventId: string | null) => {
     }
     mediaRecorderRef.current = null;
     audioChunksRef.current = [];
+    currentEventIdRef.current = null;
+    currentUserIdRef.current = null;
   }, []);
 
   // Cleanup on unmount

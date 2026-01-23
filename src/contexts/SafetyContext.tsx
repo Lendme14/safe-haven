@@ -24,6 +24,14 @@ interface SafetyContextType {
   cancelCheckInTimer: () => void;
   checkIn: () => void;
   remainingTime: number;
+
+  // Safe Walk
+  isSafeWalkActive: boolean;
+  safeWalkDestination: string | null;
+  safeWalkEta: number | null;
+  startSafeWalk: (destination: string, etaMinutes: number) => Promise<void>;
+  endSafeWalk: () => Promise<void>;
+  safeWalkRemainingTime: number;
 }
 
 const SafetyContext = createContext<SafetyContextType | undefined>(undefined);
@@ -34,13 +42,13 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   
-  // Audio recording hook
+  // Audio recording hook - no longer needs eventId as parameter
   const { 
     isRecording, 
     duration: recordingDuration, 
     startRecording, 
     stopRecording 
-  } = useAudioRecording(currentEventId);
+  } = useAudioRecording();
   
   // Check-in Timer State
   const [isTimerActive, setIsTimerActive] = useState(false);
@@ -49,6 +57,16 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [remainingTime, setRemainingTime] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Safe Walk State
+  const [isSafeWalkActive, setIsSafeWalkActive] = useState(false);
+  const [safeWalkDestination, setSafeWalkDestination] = useState<string | null>(null);
+  const [safeWalkEta, setSafeWalkEta] = useState<number | null>(null);
+  const [safeWalkRemainingTime, setSafeWalkRemainingTime] = useState(0);
+  const [safeWalkEventId, setSafeWalkEventId] = useState<string | null>(null);
+  const safeWalkTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const safeWalkCountdownRef = useRef<NodeJS.Timeout | null>(null);
+  const locationWatchRef = useRef<number | null>(null);
 
   // Update remaining time every second
   useEffect(() => {
@@ -70,6 +88,58 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       };
     }
   }, [isTimerActive, timerEndTime]);
+
+  // Safe Walk countdown
+  useEffect(() => {
+    if (isSafeWalkActive && safeWalkEta) {
+      const endTime = new Date(Date.now() + safeWalkEta * 60 * 1000);
+      
+      safeWalkCountdownRef.current = setInterval(() => {
+        const now = new Date();
+        const remaining = Math.max(0, Math.floor((endTime.getTime() - now.getTime()) / 1000));
+        setSafeWalkRemainingTime(remaining);
+        
+        if (remaining <= 0) {
+          handleSafeWalkExpired();
+        }
+      }, 1000);
+
+      return () => {
+        if (safeWalkCountdownRef.current) {
+          clearInterval(safeWalkCountdownRef.current);
+        }
+      };
+    }
+  }, [isSafeWalkActive, safeWalkEta]);
+
+  const handleSafeWalkExpired = useCallback(async () => {
+    if (!user) return;
+    
+    console.log('Safe walk ETA expired - alerting contacts');
+    
+    try {
+      const { error: alertError } = await supabase.functions.invoke('send-alert', {
+        body: {
+          safety_event_id: safeWalkEventId,
+          alert_type: 'safe_walk_expired',
+          user_id: user.id,
+          destination: safeWalkDestination,
+        },
+      });
+
+      if (alertError) {
+        console.error('Error sending safe walk alert:', alertError);
+      }
+
+      toast({
+        title: "ETA Expired",
+        description: "Your trusted contacts have been alerted. Are you safe?",
+        variant: "destructive",
+      });
+    } catch (error) {
+      console.error('Error handling safe walk expiration:', error);
+    }
+  }, [user, safeWalkEventId, safeWalkDestination]);
 
   const handleMissedCheckIn = useCallback(async () => {
     if (!user) return;
@@ -187,6 +257,7 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setIsLoading(true);
     
     try {
+      // Create safety event first
       const { data: event, error } = await supabase
         .from('safety_events')
         .insert({
@@ -198,28 +269,26 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       if (error) throw error;
 
-      setCurrentEventId(event.id);
+      const eventId = event.id;
+      setCurrentEventId(eventId);
       setIsActive(true);
 
       // Capture initial location
-      const location = await captureLocation(event.id);
+      const location = await captureLocation(eventId);
 
-      // Start audio recording automatically
-      console.log('Starting audio recording for safety event:', event.id);
-      // Small delay to ensure state is updated
-      setTimeout(async () => {
-        const recordingStarted = await startRecording();
-        if (recordingStarted) {
-          console.log('Audio recording started successfully');
-        } else {
-          console.log('Audio recording could not start');
-        }
-      }, 500);
+      // Start audio recording with userId and eventId directly
+      console.log('Starting audio recording for safety event:', eventId);
+      const recordingStarted = await startRecording(user.id, eventId);
+      if (recordingStarted) {
+        console.log('Audio recording started successfully');
+      } else {
+        console.log('Audio recording could not start');
+      }
 
       // Send alerts via edge function
       const { error: alertError } = await supabase.functions.invoke('send-alert', {
         body: {
-          safety_event_id: event.id,
+          safety_event_id: eventId,
           alert_type: 'activation',
           user_id: user.id,
           location,
@@ -298,6 +367,129 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [user, isActive, currentEventId, stopRecording]);
 
+  // Safe Walk Functions
+  const startSafeWalk = useCallback(async (destination: string, etaMinutes: number) => {
+    if (!user || isSafeWalkActive) return;
+
+    try {
+      // Create safety event for safe walk
+      const { data: event, error } = await supabase
+        .from('safety_events')
+        .insert({
+          user_id: user.id,
+          is_active: true,
+          notes: `Safe Walk to: ${destination}`,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setSafeWalkEventId(event.id);
+      setSafeWalkDestination(destination);
+      setSafeWalkEta(etaMinutes);
+      setSafeWalkRemainingTime(etaMinutes * 60);
+      setIsSafeWalkActive(true);
+
+      // Get initial location
+      await captureLocation(event.id);
+
+      // Start continuous location tracking
+      if (navigator.geolocation) {
+        locationWatchRef.current = navigator.geolocation.watchPosition(
+          async (position) => {
+            await supabase.from('location_logs').insert({
+              safety_event_id: event.id,
+              user_id: user.id,
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              accuracy: position.coords.accuracy,
+            });
+          },
+          (error) => console.log('Location watch error:', error),
+          { enableHighAccuracy: true, maximumAge: 30000, timeout: 30000 }
+        );
+      }
+
+      // Alert contacts about safe walk start
+      await supabase.functions.invoke('send-alert', {
+        body: {
+          safety_event_id: event.id,
+          alert_type: 'safe_walk_started',
+          user_id: user.id,
+          destination,
+          eta_minutes: etaMinutes,
+        },
+      });
+
+      toast({
+        title: "Safe Walk Started",
+        description: `Your contacts know you're heading to ${destination}.`,
+      });
+
+    } catch (error) {
+      console.error('Error starting safe walk:', error);
+      toast({
+        title: "Error",
+        description: "Could not start safe walk.",
+        variant: "destructive",
+      });
+    }
+  }, [user, isSafeWalkActive, captureLocation]);
+
+  const endSafeWalk = useCallback(async () => {
+    if (!user || !isSafeWalkActive || !safeWalkEventId) return;
+
+    try {
+      // Stop location watching
+      if (locationWatchRef.current !== null) {
+        navigator.geolocation.clearWatch(locationWatchRef.current);
+        locationWatchRef.current = null;
+      }
+
+      // Clear timers
+      if (safeWalkTimerRef.current) {
+        clearTimeout(safeWalkTimerRef.current);
+      }
+      if (safeWalkCountdownRef.current) {
+        clearInterval(safeWalkCountdownRef.current);
+      }
+
+      // Update event
+      await supabase
+        .from('safety_events')
+        .update({
+          is_active: false,
+          ended_at: new Date().toISOString(),
+        })
+        .eq('id', safeWalkEventId);
+
+      // Alert contacts
+      await supabase.functions.invoke('send-alert', {
+        body: {
+          safety_event_id: safeWalkEventId,
+          alert_type: 'safe_walk_completed',
+          user_id: user.id,
+          destination: safeWalkDestination,
+        },
+      });
+
+      setIsSafeWalkActive(false);
+      setSafeWalkDestination(null);
+      setSafeWalkEta(null);
+      setSafeWalkRemainingTime(0);
+      setSafeWalkEventId(null);
+
+      toast({
+        title: "Arrived Safely",
+        description: "Your contacts have been notified that you arrived.",
+      });
+
+    } catch (error) {
+      console.error('Error ending safe walk:', error);
+    }
+  }, [user, isSafeWalkActive, safeWalkEventId, safeWalkDestination]);
+
   // Check-in Timer Functions
   const startCheckInTimer = useCallback((minutes: number) => {
     if (timerRef.current) {
@@ -367,6 +559,15 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (countdownRef.current) {
         clearInterval(countdownRef.current);
       }
+      if (safeWalkTimerRef.current) {
+        clearTimeout(safeWalkTimerRef.current);
+      }
+      if (safeWalkCountdownRef.current) {
+        clearInterval(safeWalkCountdownRef.current);
+      }
+      if (locationWatchRef.current !== null) {
+        navigator.geolocation.clearWatch(locationWatchRef.current);
+      }
     };
   }, []);
 
@@ -386,6 +587,12 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       cancelCheckInTimer,
       checkIn,
       remainingTime,
+      isSafeWalkActive,
+      safeWalkDestination,
+      safeWalkEta,
+      startSafeWalk,
+      endSafeWalk,
+      safeWalkRemainingTime,
     }}>
       {children}
     </SafetyContext.Provider>
