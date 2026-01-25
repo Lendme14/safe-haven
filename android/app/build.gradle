@@ -1,8 +1,14 @@
-apply plugin: 'com.android.application'
+plugins {
+    id 'com.android.application'
+}
 
 android {
     namespace = "com.mettaloid.sentri"
     compileSdk = rootProject.ext.compileSdkVersion
+    compileOptions {
+        sourceCompatibility rootProject.ext.javaVersion
+        targetCompatibility rootProject.ext.javaVersion
+    }
     defaultConfig {
         applicationId "com.mettaloid.sentri"
         minSdkVersion rootProject.ext.minSdkVersion
