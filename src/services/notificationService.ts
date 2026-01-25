@@ -1,5 +1,9 @@
-import { LocalNotifications } from '@capacitor/local-notifications';
-import type { LocalNotificationSchema, Importance } from '@capacitor/local-notifications';
+import {
+  scheduleNotification,
+  cancelNotification as cordovaCancelNotification,
+  cancelAllNotifications as cordovaCancelAllNotifications,
+  isCordova,
+} from './cordovaBridge';
 
 export interface NotificationOptions {
   id?: number;
@@ -41,21 +45,15 @@ export class NotificationService {
    */
   private async initializeNotifications(): Promise<void> {
     try {
-      // Request permission for notifications
-      const permResult = await LocalNotifications.requestPermissions();
-      console.log('Notification permission result:', permResult);
+      // Request permission for web notifications
+      if (!isCordova() && 'Notification' in window) {
+        const permission = await Notification.requestPermission();
+        console.log('Web notification permission:', permission);
+      }
 
-      // Listen for notification actions
-      LocalNotifications.addListener(
-        'localNotificationActionPerformed',
-        (notification) => {
-          console.log('Notification action performed:', notification);
-        }
-      );
-
-      LocalNotifications.addListener('localNotificationReceived', (notification) => {
-        console.log('Notification received:', notification);
-      });
+      // Cordova notifications don't need explicit permission request on init
+      // They request when first notification is scheduled
+      console.log('Notification service initialized');
     } catch (error) {
       console.warn('Notification initialization error:', error);
     }
@@ -67,11 +65,23 @@ export class NotificationService {
   async showNotification(options: NotificationOptions): Promise<number> {
     try {
       const id = options.id || this.notificationId++;
-      const notification = this.buildNotification(id, options);
 
-      await LocalNotifications.schedule({
-        notifications: [notification],
-      });
+      if (isCordova()) {
+        await scheduleNotification({
+          id,
+          title: options.title,
+          text: options.body,
+          foreground: true,
+          ongoing: options.ongoing,
+          sound: options.sound,
+        });
+      } else if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(options.title, {
+          body: options.body,
+          tag: options.tag || String(id),
+          icon: options.smallIcon,
+        });
+      }
 
       return id;
     } catch (error) {
@@ -83,12 +93,9 @@ export class NotificationService {
   /**
    * Send a persistent notification
    */
-  async showPersistentNotification(
-    options: NotificationOptions
-  ): Promise<number> {
+  async showPersistentNotification(options: NotificationOptions): Promise<number> {
     const id = options.id || this.notificationId++;
 
-    // Mark as ongoing (persistent on Android)
     const persistentOptions: NotificationOptions = {
       ...options,
       id,
@@ -99,10 +106,22 @@ export class NotificationService {
     this.persistentNotifications.set(id, persistentOptions);
 
     try {
-      const notification = this.buildNotification(id, persistentOptions);
-      await LocalNotifications.schedule({
-        notifications: [notification],
-      });
+      if (isCordova()) {
+        await scheduleNotification({
+          id,
+          title: options.title,
+          text: options.body,
+          foreground: true,
+          ongoing: true,
+          sound: options.sound,
+        });
+      } else if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(options.title, {
+          body: options.body,
+          tag: String(id),
+          requireInteraction: true,
+        });
+      }
 
       return id;
     } catch (error) {
@@ -123,10 +142,10 @@ export class NotificationService {
       if (!existing) {
         throw new Error('Notification not found');
       }
-      
-      const updated: NotificationOptions = { 
-        ...existing, 
-        ...options, 
+
+      const updated: NotificationOptions = {
+        ...existing,
+        ...options,
         id,
         title: options.title || existing.title,
         body: options.body || existing.body,
@@ -134,10 +153,21 @@ export class NotificationService {
 
       this.persistentNotifications.set(id, updated);
 
-      const notification = this.buildNotification(id, updated);
-      await LocalNotifications.schedule({
-        notifications: [notification],
-      });
+      if (isCordova()) {
+        await scheduleNotification({
+          id,
+          title: updated.title,
+          text: updated.body,
+          foreground: true,
+          ongoing: true,
+        });
+      } else if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(updated.title, {
+          body: updated.body,
+          tag: String(id),
+          requireInteraction: true,
+        });
+      }
     } catch (error) {
       console.error('Error updating persistent notification:', error);
       throw error;
@@ -149,7 +179,9 @@ export class NotificationService {
    */
   async cancelNotification(id: number): Promise<void> {
     try {
-      await LocalNotifications.cancel({ notifications: [{ id }] });
+      if (isCordova()) {
+        await cordovaCancelNotification(id);
+      }
       this.persistentNotifications.delete(id);
     } catch (error) {
       console.error('Error canceling notification:', error);
@@ -162,11 +194,8 @@ export class NotificationService {
    */
   async cancelAllNotifications(): Promise<void> {
     try {
-      const pending = await LocalNotifications.getPending();
-      if (pending.notifications.length > 0) {
-        await LocalNotifications.cancel({ 
-          notifications: pending.notifications.map(n => ({ id: n.id })) 
-        });
+      if (isCordova()) {
+        await cordovaCancelAllNotifications();
       }
       this.persistentNotifications.clear();
     } catch (error) {
@@ -252,91 +281,39 @@ export class NotificationService {
   }
 
   /**
-   * Build notification object for Capacitor
+   * Get pending notifications (Cordova-only feature)
    */
-  private buildNotification(
-    id: number,
-    options: NotificationOptions
-  ): LocalNotificationSchema {
-    return {
-      id,
-      title: options.title,
-      body: options.body,
-      largeBody: options.largeBody,
-      summaryText: options.summaryText,
-      autoCancel: options.autoCancel !== false,
-      ongoing: options.ongoing || false,
-      smallIcon: options.smallIcon || 'ic_stat_icon_config_sample',
-      largeIcon: options.largeIcon,
-      iconColor: options.iconColor || '#488AFF',
-      sound: options.sound,
-      channelId: options.channelId || 'default',
-      schedule: options.schedule,
-    };
+  async getPendingNotifications(): Promise<any[]> {
+    // Not directly supported in Cordova local notifications plugin
+    // Return from our internal map instead
+    return Array.from(this.persistentNotifications.values());
   }
 
   /**
-   * Get pending notifications
-   */
-  async getPendingNotifications(): Promise<LocalNotificationSchema[]> {
-    try {
-      const result = await LocalNotifications.getPending();
-      return result.notifications;
-    } catch (error) {
-      console.error('Error getting pending notifications:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Create notification channel (Android)
+   * Create notification channel (Android - handled via config.xml in Cordova)
    */
   async createChannel(
     id: string,
     name: string,
     description?: string,
-    importance: Importance = 4 as Importance
+    importance: number = 4
   ): Promise<void> {
-    try {
-      await LocalNotifications.createChannel({
-        id,
-        name,
-        description,
-        importance,
-        lights: true,
-        lightColor: '#488AFF',
-        sound: 'beep.wav',
-        vibration: true,
-      });
-    } catch (error) {
-      console.error('Error creating notification channel:', error);
-      throw error;
-    }
+    console.log('Notification channel creation handled via config.xml in Cordova');
   }
 
   /**
-   * Delete notification channel (Android)
+   * Delete notification channel
    */
   async deleteChannel(id: string): Promise<void> {
-    try {
-      await LocalNotifications.deleteChannel({ id });
-    } catch (error) {
-      console.error('Error deleting notification channel:', error);
-      throw error;
-    }
+    console.log('Notification channel deletion not supported in Cordova');
   }
 
   /**
    * List notification channels
    */
   async listChannels(): Promise<any[]> {
-    try {
-      const result = await LocalNotifications.listChannels();
-      return result.channels;
-    } catch (error) {
-      console.error('Error listing channels:', error);
-      return [];
-    }
+    console.log('Listing channels not supported in Cordova');
+    return [];
   }
 }
 

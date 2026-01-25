@@ -1,0 +1,193 @@
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="com.mettaloid.sentri" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0" xmlns:android="http://schemas.android.com/apk/res/android">
+    <name>Sentri</name>
+    <description>Personal Safety App - Stay safe with trusted contacts, location tracking, and emergency alerts</description>
+    <author email="support@mettaloid.com" href="https://mettaloid.com">Mettaloid Team</author>
+    <content src="index.html" />
+
+    <!-- Global Preferences -->
+    <preference name="DisallowOverscroll" value="true" />
+    <preference name="Orientation" value="portrait" />
+    <preference name="BackgroundColor" value="#0a0a0a" />
+    <preference name="SplashScreenDelay" value="3000" />
+    <preference name="FadeSplashScreen" value="true" />
+    <preference name="FadeSplashScreenDuration" value="500" />
+    <preference name="ShowSplashScreenSpinner" value="false" />
+    <preference name="AutoHideSplashScreen" value="true" />
+    <preference name="StatusBarOverlaysWebView" value="false" />
+    <preference name="StatusBarBackgroundColor" value="#0a0a0a" />
+    <preference name="StatusBarStyle" value="lightcontent" />
+
+    <!-- Android Specific Preferences -->
+    <platform name="android">
+        <preference name="android-minSdkVersion" value="24" />
+        <preference name="android-targetSdkVersion" value="34" />
+        <preference name="AndroidLaunchMode" value="singleTop" />
+        <preference name="AndroidPersistentFileLocation" value="Compatibility" />
+        <preference name="AndroidXEnabled" value="true" />
+        <preference name="GradlePluginKotlinEnabled" value="true" />
+        <preference name="GradlePluginKotlinVersion" value="1.9.10" />
+        
+        <!-- Android Icons -->
+        <icon density="ldpi" src="res/icons/android/icon-36-ldpi.png" />
+        <icon density="mdpi" src="res/icons/android/icon-48-mdpi.png" />
+        <icon density="hdpi" src="res/icons/android/icon-72-hdpi.png" />
+        <icon density="xhdpi" src="res/icons/android/icon-96-xhdpi.png" />
+        <icon density="xxhdpi" src="res/icons/android/icon-144-xxhdpi.png" />
+        <icon density="xxxhdpi" src="res/icons/android/icon-192-xxxhdpi.png" />
+        
+        <!-- Android Adaptive Icons -->
+        <icon background="res/icons/android/icon-background.png" density="ldpi" foreground="res/icons/android/icon-foreground-ldpi.png" />
+        <icon background="res/icons/android/icon-background.png" density="mdpi" foreground="res/icons/android/icon-foreground-mdpi.png" />
+        <icon background="res/icons/android/icon-background.png" density="hdpi" foreground="res/icons/android/icon-foreground-hdpi.png" />
+        <icon background="res/icons/android/icon-background.png" density="xhdpi" foreground="res/icons/android/icon-foreground-xhdpi.png" />
+        <icon background="res/icons/android/icon-background.png" density="xxhdpi" foreground="res/icons/android/icon-foreground-xxhdpi.png" />
+        <icon background="res/icons/android/icon-background.png" density="xxxhdpi" foreground="res/icons/android/icon-foreground-xxxhdpi.png" />
+        
+        <!-- Android Splash Screens -->
+        <splash density="land-ldpi" src="res/screens/android/splash-land-ldpi.png" />
+        <splash density="land-mdpi" src="res/screens/android/splash-land-mdpi.png" />
+        <splash density="land-hdpi" src="res/screens/android/splash-land-hdpi.png" />
+        <splash density="land-xhdpi" src="res/screens/android/splash-land-xhdpi.png" />
+        <splash density="land-xxhdpi" src="res/screens/android/splash-land-xxhdpi.png" />
+        <splash density="land-xxxhdpi" src="res/screens/android/splash-land-xxxhdpi.png" />
+        <splash density="port-ldpi" src="res/screens/android/splash-port-ldpi.png" />
+        <splash density="port-mdpi" src="res/screens/android/splash-port-mdpi.png" />
+        <splash density="port-hdpi" src="res/screens/android/splash-port-hdpi.png" />
+        <splash density="port-xhdpi" src="res/screens/android/splash-port-xhdpi.png" />
+        <splash density="port-xxhdpi" src="res/screens/android/splash-port-xxhdpi.png" />
+        <splash density="port-xxxhdpi" src="res/screens/android/splash-port-xxxhdpi.png" />
+
+        <!-- Android Permissions -->
+        <config-file parent="/*" target="AndroidManifest.xml">
+            <uses-permission android:name="android.permission.INTERNET" />
+            <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+            <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+            <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+            <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+            <uses-permission android:name="android.permission.RECORD_AUDIO" />
+            <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+            <uses-permission android:name="android.permission.VIBRATE" />
+            <uses-permission android:name="android.permission.WAKE_LOCK" />
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+            <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+            <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+            <uses-permission android:name="android.permission.USE_FINGERPRINT" />
+            <uses-permission android:name="android.permission.CAMERA" />
+            <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+            <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+            <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+            <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+        </config-file>
+
+        <!-- Android Features -->
+        <config-file parent="/*" target="AndroidManifest.xml">
+            <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+            <uses-feature android:name="android.hardware.microphone" android:required="false" />
+            <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
+            <uses-feature android:name="android.hardware.camera" android:required="false" />
+        </config-file>
+    </platform>
+
+    <!-- iOS Specific Preferences -->
+    <platform name="ios">
+        <preference name="deployment-target" value="13.0" />
+        <preference name="target-device" value="universal" />
+        <preference name="EnableViewportScale" value="true" />
+        <preference name="MediaTypesRequiringUserActionForPlayback" value="none" />
+        <preference name="AllowInlineMediaPlayback" value="true" />
+        <preference name="WKWebViewOnly" value="true" />
+        <preference name="SwiftVersion" value="5" />
+        
+        <!-- iOS Icons -->
+        <icon height="20" src="res/icons/ios/icon-20.png" width="20" />
+        <icon height="40" src="res/icons/ios/icon-20@2x.png" width="40" />
+        <icon height="60" src="res/icons/ios/icon-20@3x.png" width="60" />
+        <icon height="29" src="res/icons/ios/icon-29.png" width="29" />
+        <icon height="58" src="res/icons/ios/icon-29@2x.png" width="58" />
+        <icon height="87" src="res/icons/ios/icon-29@3x.png" width="87" />
+        <icon height="40" src="res/icons/ios/icon-40.png" width="40" />
+        <icon height="80" src="res/icons/ios/icon-40@2x.png" width="80" />
+        <icon height="120" src="res/icons/ios/icon-40@3x.png" width="120" />
+        <icon height="50" src="res/icons/ios/icon-50.png" width="50" />
+        <icon height="100" src="res/icons/ios/icon-50@2x.png" width="100" />
+        <icon height="57" src="res/icons/ios/icon-57.png" width="57" />
+        <icon height="114" src="res/icons/ios/icon-57@2x.png" width="114" />
+        <icon height="60" src="res/icons/ios/icon-60.png" width="60" />
+        <icon height="120" src="res/icons/ios/icon-60@2x.png" width="120" />
+        <icon height="180" src="res/icons/ios/icon-60@3x.png" width="180" />
+        <icon height="72" src="res/icons/ios/icon-72.png" width="72" />
+        <icon height="144" src="res/icons/ios/icon-72@2x.png" width="144" />
+        <icon height="76" src="res/icons/ios/icon-76.png" width="76" />
+        <icon height="152" src="res/icons/ios/icon-76@2x.png" width="152" />
+        <icon height="167" src="res/icons/ios/icon-83.5@2x.png" width="167" />
+        <icon height="1024" src="res/icons/ios/icon-1024.png" width="1024" />
+        
+        <!-- iOS Splash Screens (Storyboard Launch Images) -->
+        <splash src="res/screens/ios/Default@2x~universal~anyany.png" />
+        <splash src="res/screens/ios/Default@3x~universal~anyany.png" />
+
+        <!-- iOS Privacy Permissions -->
+        <config-file parent="NSLocationWhenInUseUsageDescription" target="*-Info.plist">
+            <string>Sentri needs your location to share with trusted contacts during safety events</string>
+        </config-file>
+        <config-file parent="NSLocationAlwaysAndWhenInUseUsageDescription" target="*-Info.plist">
+            <string>Sentri needs your location to track your journey during Safe Walk mode</string>
+        </config-file>
+        <config-file parent="NSLocationAlwaysUsageDescription" target="*-Info.plist">
+            <string>Sentri needs background location access for continuous safety tracking</string>
+        </config-file>
+        <config-file parent="NSMicrophoneUsageDescription" target="*-Info.plist">
+            <string>Sentri needs microphone access to record audio evidence during safety events</string>
+        </config-file>
+        <config-file parent="NSCameraUsageDescription" target="*-Info.plist">
+            <string>Sentri needs camera access to capture evidence during safety events</string>
+        </config-file>
+        <config-file parent="NSFaceIDUsageDescription" target="*-Info.plist">
+            <string>Sentri uses Face ID for secure app lock authentication</string>
+        </config-file>
+        <config-file parent="UIBackgroundModes" target="*-Info.plist">
+            <array>
+                <string>location</string>
+                <string>audio</string>
+                <string>fetch</string>
+                <string>remote-notification</string>
+            </array>
+        </config-file>
+    </platform>
+
+    <!-- Cordova Plugins -->
+    <plugin name="cordova-plugin-device" spec="^3.0.0" />
+    <plugin name="cordova-plugin-geolocation" spec="^5.0.0" />
+    <plugin name="cordova-plugin-media-capture" spec="^5.0.0" />
+    <plugin name="cordova-plugin-local-notification" spec="^0.9.0-beta.3" />
+    <plugin name="cordova-plugin-fingerprint-aio" spec="^5.0.1" />
+    <plugin name="cordova-plugin-vibration" spec="^3.1.1" />
+    <plugin name="cordova-plugin-statusbar" spec="^4.0.0" />
+    <plugin name="cordova-plugin-splashscreen" spec="^6.0.2" />
+    <plugin name="cordova-plugin-file" spec="^8.1.0" />
+    <plugin name="cordova-plugin-media" spec="^7.0.0" />
+
+    <!-- Access Origin -->
+    <access origin="*" />
+    <allow-intent href="http://*/*" />
+    <allow-intent href="https://*/*" />
+    <allow-intent href="tel:*" />
+    <allow-intent href="sms:*" />
+    <allow-intent href="mailto:*" />
+    <allow-intent href="geo:*" />
+
+    <platform name="android">
+        <allow-intent href="market:*" />
+    </platform>
+    <platform name="ios">
+        <allow-intent href="itms:*" />
+        <allow-intent href="itms-apps:*" />
+    </platform>
+
+    <!-- Engine Versions -->
+    <engine name="android" spec="^13.0.0" />
+    <engine name="ios" spec="^7.1.0" />
+</widget>
