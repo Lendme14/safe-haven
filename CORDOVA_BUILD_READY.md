@@ -5,7 +5,7 @@ This document confirms that the Safe Haven application is now fully prepared for
 ## ✅ Cleanup Complete
 
 ### Removed Components
-- **✓ @capacitor/camera** - Unlicensed plugin that was configured but never used in the application
+- **✓ @capacitor/camera** - Unused plugin that was configured but never used in the application
   - Removed from `capacitor.config.ts`
   - Not present in `package.json` (was never installed)
   - No Camera permissions in native configuration files
@@ -142,7 +142,7 @@ safe-haven/
 ## 🚀 Ready for Production Build
 
 ### Checklist
-- [x] All unlicensed plugins removed
+- [x] All unused plugins removed
 - [x] Camera plugin completely eliminated
 - [x] No unused dependencies
 - [x] Web assets optimized via Vite
