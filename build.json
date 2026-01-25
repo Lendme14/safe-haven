@@ -8,10 +8,10 @@
       "keystoreType": null
     },
     "release": {
-      "keystore": "sentri-release.keystore",
-      "storePassword": "REPLACE_WITH_YOUR_STORE_PASSWORD",
-      "alias": "sentri",
-      "password": "REPLACE_WITH_YOUR_KEY_PASSWORD",
+      "keystore": null,
+      "storePassword": null,
+      "alias": null,
+      "password": null,
       "keystoreType": "jks"
     }
   },
@@ -26,7 +26,7 @@
     },
     "release": {
       "codeSignIdentity": "iPhone Distribution",
-      "developmentTeam": "REPLACE_WITH_YOUR_TEAM_ID",
+      "developmentTeam": null,
       "packageType": "app-store",
       "buildFlag": [
         "-UseModernBuildSystem=0"
