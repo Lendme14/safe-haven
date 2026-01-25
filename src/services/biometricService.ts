@@ -1,3 +1,9 @@
+import {
+  checkBiometricAvailable,
+  authenticateBiometric,
+  isCordova,
+} from './cordovaBridge';
+
 export interface BiometricAuthOptions {
   reason?: string;
   subtitle?: string;
@@ -13,8 +19,7 @@ export interface BiometricAuthResult {
 }
 
 export class BiometricAuthService {
-  private biometryType: 'fingerprint' | 'faceRecognition' | 'iris' | 'unknown' =
-    'unknown';
+  private biometryType: 'fingerprint' | 'faceRecognition' | 'iris' | 'unknown' = 'unknown';
   private isAvailable = false;
   private enrolledCount = 0;
 
@@ -27,18 +32,24 @@ export class BiometricAuthService {
    */
   private async initializeBiometrics(): Promise<void> {
     try {
-      // Check if WebAuthn API is available
-      if (
-        window.PublicKeyCredential &&
-        typeof window.PublicKeyCredential === 'function'
-      ) {
-        const available =
-          await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-        this.isAvailable = available;
+      if (isCordova()) {
+        // Use Cordova fingerprint plugin
+        const result = await checkBiometricAvailable();
+        this.isAvailable = result.isAvailable;
+        this.biometryType = this.mapBiometryType(result.biometryType);
+      } else {
+        // Fallback to WebAuthn for web
+        if (
+          window.PublicKeyCredential &&
+          typeof window.PublicKeyCredential === 'function'
+        ) {
+          const available =
+            await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+          this.isAvailable = available;
 
-        if (available) {
-          // Detect biometry type based on user agent or platform
-          this.detectBiometryType();
+          if (available) {
+            this.detectBiometryType();
+          }
         }
       }
     } catch (error) {
@@ -48,18 +59,29 @@ export class BiometricAuthService {
   }
 
   /**
-   * Detect biometry type based on platform
+   * Map Cordova biometry type to our enum
+   */
+  private mapBiometryType(type: string): 'fingerprint' | 'faceRecognition' | 'iris' | 'unknown' {
+    const typeMap: Record<string, 'fingerprint' | 'faceRecognition' | 'iris' | 'unknown'> = {
+      fingerprint: 'fingerprint',
+      finger: 'fingerprint',
+      touch: 'fingerprint',
+      face: 'faceRecognition',
+      faceid: 'faceRecognition',
+      iris: 'iris',
+    };
+    return typeMap[type.toLowerCase()] || 'unknown';
+  }
+
+  /**
+   * Detect biometry type based on platform (web fallback)
    */
   private detectBiometryType(): void {
     const userAgent = navigator.userAgent.toLowerCase();
 
     if (userAgent.includes('android')) {
-      // Android typically supports fingerprint and face
-      this.biometryType = this.hasSystemBiometric()
-        ? 'fingerprint'
-        : 'faceRecognition';
+      this.biometryType = 'fingerprint';
     } else if (userAgent.includes('iphone') || userAgent.includes('ipad')) {
-      // iOS supports Face ID or Touch ID
       this.biometryType = this.detectiOSBiometry();
     } else {
       this.biometryType = 'fingerprint';
@@ -71,7 +93,6 @@ export class BiometricAuthService {
    */
   private detectiOSBiometry(): 'fingerprint' | 'faceRecognition' {
     const userAgent = navigator.userAgent;
-    // Face ID typically on newer iPhone models (X and later)
     if (
       userAgent.includes('iPhone') &&
       !userAgent.includes('iPhone 5') &&
@@ -85,17 +106,13 @@ export class BiometricAuthService {
   }
 
   /**
-   * Check if system has biometric capability
-   */
-  private hasSystemBiometric(): boolean {
-    // Try to access fingerprint API through cordova or capacitor
-    return (window as any).plugins?.fingerprint !== undefined;
-  }
-
-  /**
    * Check if biometric authentication is available
    */
   async isBiometricAvailable(): Promise<boolean> {
+    if (isCordova()) {
+      const result = await checkBiometricAvailable();
+      return result.isAvailable;
+    }
     return this.isAvailable;
   }
 
@@ -103,16 +120,34 @@ export class BiometricAuthService {
    * Get supported biometry types
    */
   async getBiometryType(): Promise<string> {
+    if (isCordova()) {
+      const result = await checkBiometricAvailable();
+      return result.biometryType;
+    }
     return this.biometryType;
   }
 
   /**
    * Perform biometric authentication
    */
-  async authenticate(
-    options: BiometricAuthOptions = {}
-  ): Promise<BiometricAuthResult> {
+  async authenticate(options: BiometricAuthOptions = {}): Promise<BiometricAuthResult> {
     try {
+      if (isCordova()) {
+        const result = await authenticateBiometric({
+          title: options.reason || 'Authenticate',
+          subtitle: options.subtitle,
+          description: options.description,
+          disableBackup: false,
+        });
+
+        return {
+          success: result.success,
+          biometryType: this.biometryType,
+          message: result.message,
+        };
+      }
+
+      // Web fallback using WebAuthn
       if (!this.isAvailable) {
         return {
           success: false,
@@ -120,7 +155,6 @@ export class BiometricAuthService {
         };
       }
 
-      // Try WebAuthn first
       const credential = await this.performWebAuthnAuth(options);
 
       if (credential) {
@@ -148,7 +182,7 @@ export class BiometricAuthService {
   }
 
   /**
-   * Perform WebAuthn authentication
+   * Perform WebAuthn authentication (web fallback)
    */
   private async performWebAuthnAuth(
     options: BiometricAuthOptions
@@ -178,10 +212,15 @@ export class BiometricAuthService {
   /**
    * Register biometric credential
    */
-  async registerBiometric(
-    options: BiometricAuthOptions = {}
-  ): Promise<BiometricAuthResult> {
+  async registerBiometric(options: BiometricAuthOptions = {}): Promise<BiometricAuthResult> {
     try {
+      if (isCordova()) {
+        // Cordova fingerprint plugin handles registration automatically
+        // Just verify the user can authenticate
+        return this.authenticate(options);
+      }
+
+      // Web fallback
       if (!this.isAvailable) {
         return {
           success: false,
@@ -216,7 +255,7 @@ export class BiometricAuthService {
   }
 
   /**
-   * Perform WebAuthn registration
+   * Perform WebAuthn registration (web fallback)
    */
   private async performWebAuthnRegistration(): Promise<PublicKeyCredential | null> {
     if (!window.PublicKeyCredential) {
@@ -239,8 +278,8 @@ export class BiometricAuthService {
           displayName: 'User',
         },
         pubKeyCredParams: [
-          { alg: -7, type: 'public-key' }, // ES256
-          { alg: -257, type: 'public-key' }, // RS256
+          { alg: -7, type: 'public-key' },
+          { alg: -257, type: 'public-key' },
         ],
         timeout: 30000,
         authenticatorSelection: {
@@ -292,8 +331,6 @@ export class BiometricAuthService {
    */
   async clearBiometric(): Promise<boolean> {
     try {
-      // Note: This only clears app-side knowledge
-      // Actual biometric data on device cannot be deleted from web
       this.enrolledCount = 0;
       return true;
     } catch (error) {
