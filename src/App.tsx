@@ -12,6 +12,7 @@ import Timeline from "./pages/Timeline";
 import Settings from "./pages/Settings";
 import Playback from "./pages/Playback";
 import NotFound from "./pages/NotFound";
+import Install from "./pages/Install";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +31,7 @@ const App = () => (
               <Route path="/timeline" element={<Timeline />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/playback" element={<Playback />} />
+              <Route path="/install" element={<Install />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </SafetyProvider>

@@ -2,10 +2,10 @@
  * Native Bridge Configuration and Utilities
  * 
  * This file provides utilities for interacting with native platform code
- * for advanced features that require direct native access.
+ * using Cordova plugins for advanced features.
  */
 
-import { registerPlugin } from '@capacitor/core';
+import { isCordova } from './cordovaBridge';
 
 /**
  * Native module interface for custom plugins
@@ -26,11 +26,11 @@ export interface NativeBridgePlugin {
 }
 
 /**
- * Web implementation for testing and fallback
+ * Web/Cordova implementation
  */
-class WebNativeBridgeImpl implements NativeBridgePlugin {
+class NativeBridgeImpl implements NativeBridgePlugin {
   async initAudioSession(): Promise<void> {
-    console.log('Web: Audio session initialized');
+    console.log('Audio session initialized');
   }
 
   async getAudioLevel(): Promise<{ level: number }> {
@@ -38,18 +38,33 @@ class WebNativeBridgeImpl implements NativeBridgePlugin {
   }
 
   async setAudioOutput(options: { output: 'speaker' | 'receiver' }): Promise<void> {
-    console.log(`Web: Audio output set to ${options.output}`);
+    console.log(`Audio output set to ${options.output}`);
   }
 
   async biometricGetStatus(): Promise<{ available: boolean; enrolled: number }> {
+    if (isCordova() && (window as any).Fingerprint) {
+      return new Promise((resolve) => {
+        (window as any).Fingerprint.isAvailable(
+          (result: any) => resolve({ available: true, enrolled: result ? 1 : 0 }),
+          () => resolve({ available: false, enrolled: 0 })
+        );
+      });
+    }
     return { available: false, enrolled: 0 };
   }
 
   async biometricCancel(): Promise<void> {
-    console.log('Web: Biometric authentication cancelled');
+    console.log('Biometric authentication cancelled');
   }
 
   async notificationPermission(): Promise<{ granted: boolean }> {
+    if (isCordova() && (window as any).cordova?.plugins?.notification?.local) {
+      return new Promise((resolve) => {
+        (window as any).cordova.plugins.notification.local.hasPermission(
+          (granted: boolean) => resolve({ granted })
+        );
+      });
+    }
     return { granted: Notification?.permission === 'granted' };
   }
 
@@ -58,14 +73,17 @@ class WebNativeBridgeImpl implements NativeBridgePlugin {
   }
 }
 
+// Singleton instance
+let bridgeInstance: NativeBridgePlugin | null = null;
+
 /**
  * Get reference to native bridge plugin
- * Custom plugins can be registered here
  */
 export const getNativeBridgePlugin = (): NativeBridgePlugin => {
-  return registerPlugin<NativeBridgePlugin>('NativeBridge', {
-    web: () => Promise.resolve(new WebNativeBridgeImpl()),
-  });
+  if (!bridgeInstance) {
+    bridgeInstance = new NativeBridgeImpl();
+  }
+  return bridgeInstance;
 };
 
 /**
