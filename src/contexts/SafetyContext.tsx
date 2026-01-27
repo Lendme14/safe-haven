@@ -4,6 +4,14 @@ import { useAuth } from './AuthContext';
 import { toast } from '@/hooks/use-toast';
 import { useAudioRecording } from '@/hooks/useAudioRecording';
 
+type LatLng = { latitude: number; longitude: number };
+
+type LastLocationLog = {
+  atMs: number;
+  latitude: number;
+  longitude: number;
+} | null;
+
 interface SafetyContextType {
   // Safety Mode
   isActive: boolean;
@@ -66,7 +74,43 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [safeWalkEventId, setSafeWalkEventId] = useState<string | null>(null);
   const safeWalkTimerRef = useRef<NodeJS.Timeout | null>(null);
   const safeWalkCountdownRef = useRef<NodeJS.Timeout | null>(null);
-  const locationWatchRef = useRef<number | null>(null);
+
+  // Independent location watches (so Safe Walk and Safety Mode don't stomp each other)
+  const safetyLocationWatchRef = useRef<number | null>(null);
+  const safeWalkLocationWatchRef = useRef<number | null>(null);
+
+  const lastSafetyLocationLogRef = useRef<LastLocationLog>(null);
+  const lastSafeWalkLocationLogRef = useRef<LastLocationLog>(null);
+
+  const haversineMeters = (a: LatLng, b: LatLng) => {
+    const R = 6371000;
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const dLat = toRad(b.latitude - a.latitude);
+    const dLon = toRad(b.longitude - a.longitude);
+    const lat1 = toRad(a.latitude);
+    const lat2 = toRad(b.latitude);
+
+    const sinDLat = Math.sin(dLat / 2);
+    const sinDLon = Math.sin(dLon / 2);
+    const x = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLon * sinDLon;
+    const y = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+    return R * y;
+  };
+
+  const shouldLogLocation = (last: LastLocationLog, next: LatLng, nowMs: number) => {
+    // Throttle DB writes while still logging reliably
+    const MIN_INTERVAL_MS = 20_000; // at least every 20s
+    const MIN_DISTANCE_M = 15; // or every 15m
+
+    if (!last) return true;
+    if (nowMs - last.atMs >= MIN_INTERVAL_MS) return true;
+
+    const dist = haversineMeters(
+      { latitude: last.latitude, longitude: last.longitude },
+      next
+    );
+    return dist >= MIN_DISTANCE_M;
+  };
 
   // Update remaining time every second
   useEffect(() => {
@@ -227,29 +271,112 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const captureLocation = useCallback(async (eventId: string) => {
     if (!user || !navigator.geolocation) return null;
 
-    return new Promise<{ latitude: number; longitude: number } | null>((resolve) => {
+    return new Promise<LatLng | null>((resolve) => {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const { latitude, longitude, accuracy } = position.coords;
-          
-          await supabase.from('location_logs').insert({
-            safety_event_id: eventId,
-            user_id: user.id,
-            latitude,
-            longitude,
-            accuracy,
-          });
-          
+
+          try {
+            const { error } = await supabase.from('location_logs').insert({
+              safety_event_id: eventId,
+              user_id: user.id,
+              latitude,
+              longitude,
+              accuracy,
+            });
+            if (error) {
+              console.error('Failed to insert initial location log:', error);
+            }
+          } catch (e) {
+            console.error('Unexpected error inserting initial location log:', e);
+          }
+
           resolve({ latitude, longitude });
         },
         (error) => {
           console.log('Location error:', error.message);
+          if (error.code === 1) {
+            toast({
+              title: 'Location permission needed',
+              description: 'Enable location access to log your timeline and share your position.',
+              variant: 'destructive',
+            });
+          }
           resolve(null);
         },
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
       );
     });
   }, [user]);
+
+  const startLocationTracking = useCallback(
+    (mode: 'safety' | 'safe_walk', eventId: string) => {
+      if (!user || !navigator.geolocation) return;
+
+      const watchRef = mode === 'safety' ? safetyLocationWatchRef : safeWalkLocationWatchRef;
+      const lastRef = mode === 'safety' ? lastSafetyLocationLogRef : lastSafeWalkLocationLogRef;
+
+      if (watchRef.current !== null) return;
+
+      watchRef.current = navigator.geolocation.watchPosition(
+        async (position) => {
+          const nowMs = Date.now();
+          const next: LatLng = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          };
+
+          if (!shouldLogLocation(lastRef.current, next, nowMs)) return;
+
+          try {
+            const { error } = await supabase.from('location_logs').insert({
+              safety_event_id: eventId,
+              user_id: user.id,
+              latitude: next.latitude,
+              longitude: next.longitude,
+              accuracy: position.coords.accuracy,
+            });
+
+            if (error) {
+              console.error(`Failed to insert ${mode} location log:`, error);
+              return;
+            }
+
+            lastRef.current = {
+              atMs: nowMs,
+              latitude: next.latitude,
+              longitude: next.longitude,
+            };
+          } catch (e) {
+            console.error(`Unexpected error inserting ${mode} location log:`, e);
+          }
+        },
+        (error) => {
+          console.log(`Location watch error (${mode}):`, error);
+          if (error.code === 1) {
+            toast({
+              title: 'Location permission needed',
+              description: 'Enable location access to log your timeline and share your position.',
+              variant: 'destructive',
+            });
+          }
+        },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }
+      );
+    },
+    [user]
+  );
+
+  const stopLocationTracking = useCallback((mode: 'safety' | 'safe_walk') => {
+    const watchRef = mode === 'safety' ? safetyLocationWatchRef : safeWalkLocationWatchRef;
+    if (watchRef.current !== null) {
+      navigator.geolocation.clearWatch(watchRef.current);
+      watchRef.current = null;
+    }
+
+    if (mode === 'safety') lastSafetyLocationLogRef.current = null;
+    if (mode === 'safe_walk') lastSafeWalkLocationLogRef.current = null;
+  }, []);
 
   const activateSafetyMode = useCallback(async () => {
     if (!user || isActive) return;
@@ -275,6 +402,9 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       // Capture initial location
       const location = await captureLocation(eventId);
+
+      // Start continuous tracking (this is what powers Timeline location history)
+      startLocationTracking('safety', eventId);
 
       // Start audio recording with userId and eventId directly
       console.log('Starting audio recording for safety event:', eventId);
@@ -314,7 +444,7 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } finally {
       setIsLoading(false);
     }
-  }, [user, isActive, captureLocation, startRecording]);
+  }, [user, isActive, captureLocation, startLocationTracking, startRecording]);
 
   const deactivateSafetyMode = useCallback(async () => {
     if (!user || !isActive || !currentEventId) return;
@@ -322,6 +452,9 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setIsLoading(true);
 
     try {
+      // Stop location tracking first to avoid late inserts after ending the event
+      stopLocationTracking('safety');
+
       // Stop audio recording first
       console.log('Stopping audio recording...');
       await stopRecording();
@@ -365,7 +498,7 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } finally {
       setIsLoading(false);
     }
-  }, [user, isActive, currentEventId, stopRecording]);
+  }, [user, isActive, currentEventId, stopLocationTracking, stopRecording]);
 
   // Safe Walk Functions
   const startSafeWalk = useCallback(async (destination: string, etaMinutes: number) => {
@@ -395,21 +528,7 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       await captureLocation(event.id);
 
       // Start continuous location tracking
-      if (navigator.geolocation) {
-        locationWatchRef.current = navigator.geolocation.watchPosition(
-          async (position) => {
-            await supabase.from('location_logs').insert({
-              safety_event_id: event.id,
-              user_id: user.id,
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-              accuracy: position.coords.accuracy,
-            });
-          },
-          (error) => console.log('Location watch error:', error),
-          { enableHighAccuracy: true, maximumAge: 30000, timeout: 30000 }
-        );
-      }
+      startLocationTracking('safe_walk', event.id);
 
       // Alert contacts about safe walk start
       await supabase.functions.invoke('send-alert', {
@@ -435,17 +554,14 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         variant: "destructive",
       });
     }
-  }, [user, isSafeWalkActive, captureLocation]);
+  }, [user, isSafeWalkActive, captureLocation, startLocationTracking]);
 
   const endSafeWalk = useCallback(async () => {
     if (!user || !isSafeWalkActive || !safeWalkEventId) return;
 
     try {
       // Stop location watching
-      if (locationWatchRef.current !== null) {
-        navigator.geolocation.clearWatch(locationWatchRef.current);
-        locationWatchRef.current = null;
-      }
+      stopLocationTracking('safe_walk');
 
       // Clear timers
       if (safeWalkTimerRef.current) {
@@ -488,7 +604,7 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch (error) {
       console.error('Error ending safe walk:', error);
     }
-  }, [user, isSafeWalkActive, safeWalkEventId, safeWalkDestination]);
+  }, [user, isSafeWalkActive, safeWalkEventId, safeWalkDestination, stopLocationTracking]);
 
   // Check-in Timer Functions
   const startCheckInTimer = useCallback((minutes: number) => {
@@ -529,7 +645,7 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       title: "Timer Cancelled",
       description: "Check-in timer has been cancelled.",
     });
-  }, []);
+  }, [stopLocationTracking]);
 
   const checkIn = useCallback(() => {
     if (timerRef.current) {
@@ -565,9 +681,8 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (safeWalkCountdownRef.current) {
         clearInterval(safeWalkCountdownRef.current);
       }
-      if (locationWatchRef.current !== null) {
-        navigator.geolocation.clearWatch(locationWatchRef.current);
-      }
+      stopLocationTracking('safety');
+      stopLocationTracking('safe_walk');
     };
   }, []);
 

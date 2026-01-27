@@ -71,13 +71,18 @@ const Timeline: React.FC = () => {
         .from('location_logs')
         .select('*')
         .eq('safety_event_id', eventId)
+        .eq('user_id', user!.id)
         .order('recorded_at', { ascending: true }),
       supabase
         .from('recordings')
         .select('*')
         .eq('safety_event_id', eventId)
+        .eq('user_id', user!.id)
         .order('created_at', { ascending: true }),
     ]);
+
+    if (locationsRes.error) console.error('Error fetching locations:', locationsRes.error);
+    if (recordingsRes.error) console.error('Error fetching recordings:', recordingsRes.error);
 
     setEventLocations(locationsRes.data || []);
     setEventRecordings(recordingsRes.data || []);
