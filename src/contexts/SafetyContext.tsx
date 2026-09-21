@@ -411,6 +411,10 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!user || isActive) return;
     
     setIsLoading(true);
+    setDistanceMeters(0);
+    setStepCount(0);
+    lastMovementPosRef.current = null;
+
     
     try {
       // Create safety event first
