@@ -93,6 +93,7 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const AVG_STEP_METERS = 0.75;
 
   const haversineMeters = (a: LatLng, b: LatLng) => {
+    const R = 6371000;
 
     const toRad = (deg: number) => (deg * Math.PI) / 180;
     const dLat = toRad(b.latitude - a.latitude);
