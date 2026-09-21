@@ -40,6 +40,10 @@ interface SafetyContextType {
   startSafeWalk: (destination: string, etaMinutes: number) => Promise<void>;
   endSafeWalk: () => Promise<void>;
   safeWalkRemainingTime: number;
+
+  // Movement tracking
+  distanceMeters: number;
+  stepCount: number;
 }
 
 const SafetyContext = createContext<SafetyContextType | undefined>(undefined);
