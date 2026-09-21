@@ -337,6 +337,24 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             longitude: position.coords.longitude,
           };
 
+          // Accumulate distance / estimated steps (filters GPS jitter & jumps)
+          const prev = lastMovementPosRef.current;
+          if (prev) {
+            const delta = haversineMeters(prev, next);
+            const accuracy = position.coords.accuracy ?? 0;
+            const minMove = Math.max(5, Math.min(accuracy, 25));
+            if (delta >= minMove && delta < 500) {
+              lastMovementPosRef.current = next;
+              setDistanceMeters((d) => {
+                const total = d + delta;
+                setStepCount(Math.round(total / AVG_STEP_METERS));
+                return total;
+              });
+            }
+          } else {
+            lastMovementPosRef.current = next;
+          }
+
           if (!shouldLogLocation(lastRef.current, next, nowMs)) return;
 
           try {
