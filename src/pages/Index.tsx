@@ -7,7 +7,7 @@ import CheckInTimer from '@/components/CheckInTimer';
 import FakeCallButton from '@/components/FakeCallButton';
 import SafeWalk from '@/components/SafeWalk';
 import { useSafety } from '@/contexts/SafetyContext';
-import { Bell, MapPin, Mic, Navigation, Shield } from 'lucide-react';
+import { Bell, Footprints, MapPin, Mic, Navigation, Shield } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 const Index: React.FC = () => {
