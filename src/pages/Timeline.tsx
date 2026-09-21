@@ -121,6 +121,28 @@ const Timeline: React.FC = () => {
     });
   };
 
+  const haversineMeters = (a: LocationLog, b: LocationLog) => {
+    const R = 6371000;
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(b.latitude - a.latitude);
+    const dLon = toRad(b.longitude - a.longitude);
+    const x =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  };
+
+  const journeyMeters = eventLocations.reduce((total, loc, i) => {
+    if (i === 0) return 0;
+    const d = haversineMeters(eventLocations[i - 1], loc);
+    return d >= 5 && d < 1000 ? total + d : total;
+  }, 0);
+
+  const journeySteps = Math.round(journeyMeters / 0.75);
+
+  const formatDistance = (meters: number) =>
+    meters >= 1000 ? `${(meters / 1000).toFixed(2)} km` : `${Math.round(meters)} m`;
+
   const calculateDuration = (start: string, end: string | null) => {
     const startDate = new Date(start);
     const endDate = end ? new Date(end) : new Date();
