@@ -290,6 +290,14 @@ const Timeline: React.FC = () => {
                     </span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b border-border">
+                    <span className="text-sm text-muted-foreground">Distance moved</span>
+                    <span className="text-sm font-medium">{formatDistance(journeyMeters)}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2 border-b border-border">
+                    <span className="text-sm text-muted-foreground">Estimated steps</span>
+                    <span className="text-sm font-medium">{journeySteps.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2 border-b border-border">
                     <span className="text-sm text-muted-foreground">Status</span>
                     <span className={`text-sm font-medium ${
                       selectedEvent.is_active ? 'text-success' : 'text-muted-foreground'
