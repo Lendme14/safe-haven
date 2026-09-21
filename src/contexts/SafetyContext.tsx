@@ -745,6 +745,8 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       startSafeWalk,
       endSafeWalk,
       safeWalkRemainingTime,
+      distanceMeters,
+      stepCount,
     }}>
       {children}
     </SafetyContext.Provider>
