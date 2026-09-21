@@ -40,6 +40,10 @@ interface SafetyContextType {
   startSafeWalk: (destination: string, etaMinutes: number) => Promise<void>;
   endSafeWalk: () => Promise<void>;
   safeWalkRemainingTime: number;
+
+  // Movement tracking
+  distanceMeters: number;
+  stepCount: number;
 }
 
 const SafetyContext = createContext<SafetyContextType | undefined>(undefined);
@@ -82,8 +86,15 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const lastSafetyLocationLogRef = useRef<LastLocationLog>(null);
   const lastSafeWalkLocationLogRef = useRef<LastLocationLog>(null);
 
+  // Movement tracking (distance covered + estimated steps)
+  const [distanceMeters, setDistanceMeters] = useState(0);
+  const [stepCount, setStepCount] = useState(0);
+  const lastMovementPosRef = useRef<LatLng | null>(null);
+  const AVG_STEP_METERS = 0.75;
+
   const haversineMeters = (a: LatLng, b: LatLng) => {
     const R = 6371000;
+
     const toRad = (deg: number) => (deg * Math.PI) / 180;
     const dLat = toRad(b.latitude - a.latitude);
     const dLon = toRad(b.longitude - a.longitude);
@@ -326,6 +337,24 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             longitude: position.coords.longitude,
           };
 
+          // Accumulate distance / estimated steps (filters GPS jitter & jumps)
+          const prev = lastMovementPosRef.current;
+          if (prev) {
+            const delta = haversineMeters(prev, next);
+            const accuracy = position.coords.accuracy ?? 0;
+            const minMove = Math.max(5, Math.min(accuracy, 25));
+            if (delta >= minMove && delta < 500) {
+              lastMovementPosRef.current = next;
+              setDistanceMeters((d) => {
+                const total = d + delta;
+                setStepCount(Math.round(total / AVG_STEP_METERS));
+                return total;
+              });
+            }
+          } else {
+            lastMovementPosRef.current = next;
+          }
+
           if (!shouldLogLocation(lastRef.current, next, nowMs)) return;
 
           try {
@@ -382,6 +411,10 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!user || isActive) return;
     
     setIsLoading(true);
+    setDistanceMeters(0);
+    setStepCount(0);
+    lastMovementPosRef.current = null;
+
     
     try {
       // Create safety event first
@@ -523,6 +556,10 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setSafeWalkEta(etaMinutes);
       setSafeWalkRemainingTime(etaMinutes * 60);
       setIsSafeWalkActive(true);
+      setDistanceMeters(0);
+      setStepCount(0);
+      lastMovementPosRef.current = null;
+
 
       // Get initial location
       await captureLocation(event.id);
@@ -708,6 +745,8 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       startSafeWalk,
       endSafeWalk,
       safeWalkRemainingTime,
+      distanceMeters,
+      stepCount,
     }}>
       {children}
     </SafetyContext.Provider>

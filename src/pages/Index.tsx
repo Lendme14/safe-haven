@@ -7,18 +7,22 @@ import CheckInTimer from '@/components/CheckInTimer';
 import FakeCallButton from '@/components/FakeCallButton';
 import SafeWalk from '@/components/SafeWalk';
 import { useSafety } from '@/contexts/SafetyContext';
-import { Bell, MapPin, Mic, Navigation, Shield } from 'lucide-react';
+import { Bell, Footprints, MapPin, Mic, Navigation, Shield } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 const Index: React.FC = () => {
   const { user, loading } = useAuth();
-  const { isActive, isRecording, recordingDuration, isSafeWalkActive, safeWalkRemainingTime, safeWalkDestination } = useSafety();
+  const { isActive, isRecording, recordingDuration, isSafeWalkActive, safeWalkRemainingTime, safeWalkDestination, distanceMeters, stepCount } = useSafety();
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  const formatDistance = (meters: number) =>
+    meters >= 1000 ? `${(meters / 1000).toFixed(2)} km` : `${Math.round(meters)} m`;
+
 
   if (loading) {
     return (
@@ -87,6 +91,18 @@ const Index: React.FC = () => {
                   <div className="w-2 h-2 bg-success rounded-full" />
                 </div>
                 <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-2xl bg-primary/10 flex items-center justify-center">
+                    <Footprints className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-foreground">Movement</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDistance(distanceMeters)} • {stepCount.toLocaleString()} steps
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+
                   <div className="w-11 h-11 rounded-2xl bg-primary/10 flex items-center justify-center">
                     <Bell className="w-5 h-5 text-primary" />
                   </div>
