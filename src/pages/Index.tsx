@@ -92,6 +92,18 @@ const Index: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="w-11 h-11 rounded-2xl bg-primary/10 flex items-center justify-center">
+                    <Footprints className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-foreground">Movement</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDistance(distanceMeters)} • {stepCount.toLocaleString()} steps
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+
+                  <div className="w-11 h-11 rounded-2xl bg-primary/10 flex items-center justify-center">
                     <Bell className="w-5 h-5 text-primary" />
                   </div>
                   <div className="flex-1">
