@@ -556,6 +556,10 @@ export const SafetyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setSafeWalkEta(etaMinutes);
       setSafeWalkRemainingTime(etaMinutes * 60);
       setIsSafeWalkActive(true);
+      setDistanceMeters(0);
+      setStepCount(0);
+      lastMovementPosRef.current = null;
+
 
       // Get initial location
       await captureLocation(event.id);
