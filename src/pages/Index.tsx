@@ -12,13 +12,17 @@ import { Card, CardContent } from '@/components/ui/card';
 
 const Index: React.FC = () => {
   const { user, loading } = useAuth();
-  const { isActive, isRecording, recordingDuration, isSafeWalkActive, safeWalkRemainingTime, safeWalkDestination } = useSafety();
+  const { isActive, isRecording, recordingDuration, isSafeWalkActive, safeWalkRemainingTime, safeWalkDestination, distanceMeters, stepCount } = useSafety();
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  const formatDistance = (meters: number) =>
+    meters >= 1000 ? `${(meters / 1000).toFixed(2)} km` : `${Math.round(meters)} m`;
+
 
   if (loading) {
     return (
